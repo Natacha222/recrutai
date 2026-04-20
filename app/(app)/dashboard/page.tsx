@@ -33,7 +33,8 @@ export default async function DashboardPage() {
     const d = new Date(iso)
     const jj = String(d.getDate()).padStart(2, '0')
     const mm = String(d.getMonth() + 1).padStart(2, '0')
-    return `${jj}/${mm}`
+    const aaaa = d.getFullYear()
+    return `${jj}/${mm}/${aaaa}`
   }
 
   return (
