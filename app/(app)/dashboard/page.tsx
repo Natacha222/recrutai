@@ -33,9 +33,7 @@ export default async function DashboardPage() {
     const d = new Date(iso)
     const jj = String(d.getDate()).padStart(2, '0')
     const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const hh = String(d.getHours()).padStart(2, '0')
-    const mn = String(d.getMinutes()).padStart(2, '0')
-    return `${jj}/${mm} · ${hh}:${mn}`
+    return `${jj}/${mm}`
   }
 
   return (
