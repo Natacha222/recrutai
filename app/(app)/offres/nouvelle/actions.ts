@@ -7,6 +7,7 @@ import {
   extractOffreFromPdfBuffer,
   type ExtractedOffre,
 } from '@/lib/offre-extraction'
+import { todayIso } from '@/lib/format'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
@@ -33,6 +34,11 @@ export async function createOffre(formData: FormData) {
   if (!titre || !client_id || !lieu || !description || !date_validite) {
     return redirect(
       '/offres/nouvelle?error=Tous+les+champs+sont+obligatoires'
+    )
+  }
+  if (date_validite < todayIso()) {
+    return redirect(
+      '/offres/nouvelle?error=La+date+de+validit%C3%A9+doit+%C3%AAtre+post%C3%A9rieure+ou+%C3%A9gale+%C3%A0+aujourd%27hui'
     )
   }
 

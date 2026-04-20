@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
-import { formatValidite } from '@/lib/format'
+import { formatValidite, effectiveStatut } from '@/lib/format'
 
 export default async function OffresPage() {
   const supabase = await createClient()
@@ -13,8 +13,15 @@ export default async function OffresPage() {
     )
     .order('created_at', { ascending: false })
 
-  const offresActives = offres?.filter((o) => o.statut === 'actif') ?? []
-  const offresClos = offres?.filter((o) => o.statut === 'clos') ?? []
+  // Statut effectif = DB + règle d'expiration (cf. lib/format)
+  const offresActives =
+    offres?.filter(
+      (o) => effectiveStatut(o.statut, o.date_validite) === 'actif'
+    ) ?? []
+  const offresClos =
+    offres?.filter(
+      (o) => effectiveStatut(o.statut, o.date_validite) === 'clos'
+    ) ?? []
 
   return (
     <div>
@@ -79,7 +86,9 @@ export default async function OffresPage() {
                   <td className="px-6 py-5 text-muted">{clientNom ?? '—'}</td>
                   <td className="px-6 py-5 text-muted">{o.contrat ?? '—'}</td>
                   <td className="px-6 py-5">
-                    <StatusBadge status={o.statut ?? 'actif'} />
+                    <StatusBadge
+                      status={effectiveStatut(o.statut, o.date_validite)}
+                    />
                   </td>
                   <td className="px-6 py-5 text-muted">
                     {formatValidite(o.date_validite)}

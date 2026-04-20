@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { todayIso } from '@/lib/format'
 import OffreForm from './OffreForm'
 
 type SearchParams = Promise<{ error?: string; client_id?: string }>
@@ -28,6 +29,7 @@ export default async function NouvelleOffrePage({
       <OffreForm
         clients={clients ?? []}
         initialClientId={client_id ?? ''}
+        today={todayIso()}
       />
     </div>
   )

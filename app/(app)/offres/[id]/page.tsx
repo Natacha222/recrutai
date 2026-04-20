@@ -2,7 +2,12 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
-import { formatValidite } from '@/lib/format'
+import {
+  formatValidite,
+  effectiveStatut,
+  isExpired,
+  todayIso,
+} from '@/lib/format'
 import CVUploader from './CVUploader'
 import { updateOffre } from './actions'
 
@@ -60,6 +65,13 @@ export default async function OffreDetailPage({
     ? offre.clients[0]
     : (offre.clients as { nom: string; secteur: string } | null)
 
+  // Statut effectif : une offre dont la date de validité est dépassée passe
+  // automatiquement en « clos », même si la DB la liste comme « actif ».
+  const effectiveOffreStatut = effectiveStatut(offre.statut, offre.date_validite)
+  const autoClosed =
+    offre.statut !== 'clos' && isExpired(offre.date_validite)
+  const today = todayIso()
+
   return (
     <div className="space-y-6">
       <div>
@@ -75,7 +87,7 @@ export default async function OffreDetailPage({
         </div>
         <div className="flex items-center gap-3 flex-wrap mt-1">
           <h1 className="text-2xl font-bold">{offre.titre}</h1>
-          <StatusBadge status={offre.statut ?? 'actif'} />
+          <StatusBadge status={effectiveOffreStatut} />
         </div>
       </div>
 
@@ -87,6 +99,12 @@ export default async function OffreDetailPage({
       {saved && (
         <div className="px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
           Modifications enregistrées.
+        </div>
+      )}
+      {autoClosed && (
+        <div className="px-3 py-2 rounded-md bg-status-amber-bg text-status-amber text-sm">
+          Offre clôturée automatiquement : la date de validité est dépassée.
+          Modifie-la ci-dessous pour la réactiver.
         </div>
       )}
 
@@ -118,10 +136,10 @@ export default async function OffreDetailPage({
         />
       </div>
 
-      {/* Uploader CV — désactivé quand l'offre est clôturée */}
+      {/* Uploader CV — désactivé quand l'offre est clôturée (manuel ou auto) */}
       <CVUploader
         offreId={offre.id}
-        disabled={offre.statut === 'clos'}
+        disabled={effectiveOffreStatut === 'clos'}
       />
 
       {/* Candidatures */}
@@ -314,6 +332,7 @@ export default async function OffreDetailPage({
               name="date_validite"
               type="date"
               required
+              min={today}
               defaultValue={offre.date_validite ?? ''}
               className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
             />

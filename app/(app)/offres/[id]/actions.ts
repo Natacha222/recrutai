@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { scoreCandidate } from '@/lib/scoring'
 import { sendQualifiedCandidateEmail } from '@/lib/email'
+import { effectiveStatut, todayIso } from '@/lib/format'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 const STATUTS = ['actif', 'clos']
@@ -41,6 +42,11 @@ export async function updateOffre(formData: FormData) {
   if (!date_validite) {
     return redirect(
       `/offres/${id}?error=La+date+de+validit%C3%A9+est+obligatoire`
+    )
+  }
+  if (date_validite < todayIso()) {
+    return redirect(
+      `/offres/${id}?error=La+date+de+validit%C3%A9+doit+%C3%AAtre+post%C3%A9rieure+ou+%C3%A9gale+%C3%A0+aujourd%27hui`
     )
   }
 
@@ -119,12 +125,24 @@ export async function ingestCVs({
 
   const { data: offre, error: offreErr } = await supabase
     .from('offres')
-    .select('id, titre, description, seuil, clients(contact_email)')
+    .select(
+      'id, titre, description, seuil, statut, date_validite, clients(contact_email)'
+    )
     .eq('id', offreId)
     .single()
 
   if (offreErr || !offre) {
     return { ok: false, error: "Offre introuvable." }
+  }
+
+  // Garde-fou : on ne traite pas de CV pour une offre clôturée (manuellement
+  // ou parce que sa date de validité est dépassée).
+  if (effectiveStatut(offre.statut, offre.date_validite) === 'clos') {
+    return {
+      ok: false,
+      error:
+        "Cette offre est clôturée (statut manuel ou date de validité dépassée). Réactive-la avant de joindre des CVs.",
+    }
   }
 
   // Pour chaque upload : télécharge le PDF une seule fois (réutilisé pour le

@@ -11,3 +11,43 @@ export function formatValidite(d: string | null | undefined): string {
   if (parts.length !== 3) return d
   return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
+
+/**
+ * Retourne la date du jour en Europe/Paris au format YYYY-MM-DD.
+ * Utilisée à la fois pour la validation des formulaires et le calcul
+ * du statut effectif d'une offre. On passe par Intl pour que Vercel
+ * (serveur UTC) ne décale pas la date d'un jour aux heures de nuit FR.
+ */
+export function todayIso(): string {
+  const parts = new Intl.DateTimeFormat('fr-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const y = parts.find((p) => p.type === 'year')?.value ?? ''
+  const m = parts.find((p) => p.type === 'month')?.value ?? ''
+  const d = parts.find((p) => p.type === 'day')?.value ?? ''
+  return `${y}-${m}-${d}`
+}
+
+/** true si la date de validité est strictement antérieure à aujourd'hui. */
+export function isExpired(dateValidite: string | null | undefined): boolean {
+  if (!dateValidite) return false
+  // Les ISO YYYY-MM-DD se comparent lexicographiquement = chronologiquement.
+  return dateValidite < todayIso()
+}
+
+/**
+ * Statut effectif d'une offre, qui combine le statut manuel stocké en base
+ * et la date de validité. Une offre dont la date est dépassée bascule
+ * automatiquement en « clos », même si l'utilisateur n'a rien touché.
+ */
+export function effectiveStatut(
+  rawStatut: string | null | undefined,
+  dateValidite: string | null | undefined
+): 'actif' | 'clos' {
+  if (rawStatut === 'clos') return 'clos'
+  if (isExpired(dateValidite)) return 'clos'
+  return 'actif'
+}

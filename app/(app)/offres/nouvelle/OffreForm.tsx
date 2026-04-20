@@ -17,9 +17,11 @@ const CONTRATS: Contrat[] = ['CDI', 'CDD', 'Alternance', 'Stage']
 export default function OffreForm({
   clients: initialClients,
   initialClientId,
+  today,
 }: {
   clients: Client[]
   initialClientId: string
+  today: string
 }) {
   const [clients, setClients] = useState<Client[]>(initialClients)
 
@@ -75,7 +77,9 @@ export default function OffreForm({
     setLieu(result.data.lieu)
     setContrat(result.data.contrat)
     setDescription(result.data.description)
-    if (result.data.date_validite) {
+    // On n'accepte une date extraite que si elle est dans le futur, sinon
+    // l'utilisateur serait bloqué au moment de valider.
+    if (result.data.date_validite && result.data.date_validite >= today) {
       setDateValidite(result.data.date_validite)
     }
 
@@ -110,7 +114,8 @@ export default function OffreForm({
     lieu.trim() !== '' &&
     description.trim() !== '' &&
     Number.isFinite(seuil) &&
-    /^\d{4}-\d{2}-\d{2}$/.test(dateValidite)
+    /^\d{4}-\d{2}-\d{2}$/.test(dateValidite) &&
+    dateValidite >= today
 
   return (
     <>
@@ -295,6 +300,7 @@ export default function OffreForm({
               name="date_validite"
               type="date"
               required
+              min={today}
               value={dateValidite}
               onChange={(e) => setDateValidite(e.target.value)}
               className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
