@@ -416,6 +416,68 @@ export async function qualifyCandidature(
 }
 
 /**
+ * Supprime TOUTES les candidatures d'une offre, et nettoie les PDF
+ * correspondants dans le storage. Action irréversible, utilisée depuis
+ * le bouton « Effacer toutes les candidatures » de la fiche offre
+ * (protégé par une modale de confirmation côté client).
+ */
+export async function deleteAllCandidaturesForOffre(
+  offreId: string
+): Promise<
+  | { ok: true; deletedCount: number; storageDeletedCount: number }
+  | { ok: false; error: string }
+> {
+  if (!offreId) return { ok: false, error: 'Offre introuvable.' }
+
+  const supabase = await createClient()
+
+  // 1) Récupère la liste des cv_path pour nettoyer le storage après
+  const { data: rows, error: listErr } = await supabase
+    .from('candidatures')
+    .select('id, cv_path')
+    .eq('offre_id', offreId)
+
+  if (listErr) return { ok: false, error: listErr.message }
+
+  const cvPaths = (rows ?? [])
+    .map((r) => r.cv_path)
+    .filter((p): p is string => !!p)
+
+  // 2) Supprime les candidatures
+  const { error: delErr, count } = await supabase
+    .from('candidatures')
+    .delete({ count: 'exact' })
+    .eq('offre_id', offreId)
+
+  if (delErr) return { ok: false, error: delErr.message }
+
+  // 3) Supprime les PDF du storage (best-effort : on n'échoue pas si ça
+  //    foire, les candidatures sont déjà parties en base de toute façon)
+  let storageDeletedCount = 0
+  if (cvPaths.length > 0) {
+    const { data: removed, error: rmErr } = await supabase.storage
+      .from('cvs')
+      .remove(cvPaths)
+    if (rmErr) {
+      console.error(
+        `[deleteAllCandidaturesForOffre] storage cleanup partiel : ${rmErr.message}`
+      )
+    } else {
+      storageDeletedCount = removed?.length ?? 0
+    }
+  }
+
+  revalidatePath(`/offres/${offreId}`)
+  revalidatePath('/offres')
+  revalidatePath('/dashboard')
+  return {
+    ok: true,
+    deletedCount: count ?? 0,
+    storageDeletedCount,
+  }
+}
+
+/**
  * Rejette manuellement une candidature en attente : passe son statut à
  * « rejeté » sans envoyer d'email au client.
  */

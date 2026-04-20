@@ -10,6 +10,7 @@ import {
 } from '@/lib/format'
 import CVUploader from './CVUploader'
 import CandidatureActions from './CandidatureActions'
+import DeleteAllCandidaturesButton from './DeleteAllCandidaturesButton'
 import { updateOffre } from './actions'
 
 type CandidatureFilter = 'qualifié' | 'en attente' | 'rejeté'
@@ -179,14 +180,19 @@ export default async function OffreDetailPage({
               ? `Candidatures « ${activeFilter} » (${filteredCandidatures.length})`
               : `Candidatures reçues (${total})`}
           </h2>
-          {activeFilter && (
-            <Link
-              href={`/offres/${offre.id}`}
-              className="text-xs text-brand-purple hover:underline"
-            >
-              ← Voir toutes les candidatures
-            </Link>
-          )}
+          <div className="flex items-center gap-3 flex-wrap">
+            {activeFilter && (
+              <Link
+                href={`/offres/${offre.id}`}
+                className="text-xs text-brand-purple hover:underline"
+              >
+                ← Voir toutes les candidatures
+              </Link>
+            )}
+            {!activeFilter && (
+              <DeleteAllCandidaturesButton offreId={offre.id} total={total} />
+            )}
+          </div>
         </div>
         <table className="w-full">
           <thead className="bg-surface">
