@@ -13,11 +13,11 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="w-60 shrink-0 bg-brand-indigo text-brand-indigo-light min-h-screen flex flex-col">
+    <aside className="w-60 shrink-0 bg-brand-indigo text-brand-indigo-light sticky top-0 h-screen flex flex-col">
       <div className="px-6 py-6 text-white font-bold text-lg tracking-wide">
         RecrutAI
       </div>
-      <nav className="flex-1 px-3 space-y-1">
+      <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const active = pathname.startsWith(item.href)
           return (
@@ -36,7 +36,7 @@ export default function Sidebar() {
           )
         })}
       </nav>
-      <form action="/auth/logout" method="post" className="p-4">
+      <form action="/auth/logout" method="post" className="p-4 shrink-0 border-t border-white/10">
         <button
           type="submit"
           className="w-full text-left text-xs text-brand-indigo-light/70 hover:text-white"
