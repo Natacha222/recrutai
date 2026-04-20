@@ -3,6 +3,8 @@ import { createClientAction } from './actions'
 
 type SearchParams = Promise<{ error?: string }>
 
+const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
+
 export default async function NouveauClientPage({
   searchParams,
 }: {
@@ -24,11 +26,34 @@ export default async function NouveauClientPage({
         action={createClientAction}
         className="bg-surface-alt rounded-xl p-6 border border-border-soft space-y-4"
       >
-        <Field label="Nom du client" name="nom" required />
+        <Field label="Nom de l'entreprise" name="nom" required />
         <Field label="Secteur" name="secteur" />
-        <Field label="Email de contact" name="contact_email" type="email" />
+        <Field label="Email de notification" name="contact_email" type="email" />
 
-        <div className="flex gap-3 pt-2">
+        <div>
+          <label
+            htmlFor="formule"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
+            Formule
+          </label>
+          <select
+            id="formule"
+            name="formule"
+            defaultValue="Abonnement"
+            className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+          >
+            {FORMULES.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <Field label="AM référent" name="am_referent" />
+
+        <div className="flex justify-end gap-3 pt-2">
           <Link
             href="/clients"
             className="px-4 py-2 border border-border-soft rounded-md text-sm hover:bg-surface"

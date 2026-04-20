@@ -6,9 +6,10 @@ import { redirect } from 'next/navigation'
 
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
 
-export async function createClientAction(formData: FormData) {
+export async function updateClient(formData: FormData) {
   const supabase = await createClient()
 
+  const id = String(formData.get('id') ?? '').trim()
   const nom = String(formData.get('nom') ?? '').trim()
   const secteur = String(formData.get('secteur') ?? '').trim() || null
   const contact_email =
@@ -18,18 +19,26 @@ export async function createClientAction(formData: FormData) {
   const am_referent =
     String(formData.get('am_referent') ?? '').trim() || null
 
+  if (!id) {
+    return redirect('/clients?error=Client+introuvable')
+  }
+
   if (!nom) {
-    return redirect('/clients/nouveau?error=Le+nom+est+obligatoire')
+    return redirect(`/clients/${id}?error=Le+nom+est+obligatoire`)
   }
 
   const { error } = await supabase
     .from('clients')
-    .insert({ nom, secteur, contact_email, formule, am_referent })
+    .update({ nom, secteur, contact_email, formule, am_referent })
+    .eq('id', id)
 
   if (error) {
-    return redirect(`/clients/nouveau?error=${encodeURIComponent(error.message)}`)
+    return redirect(
+      `/clients/${id}?error=${encodeURIComponent(error.message)}`
+    )
   }
 
   revalidatePath('/clients')
-  redirect('/clients')
+  revalidatePath(`/clients/${id}`)
+  redirect(`/clients/${id}?updated=1`)
 }

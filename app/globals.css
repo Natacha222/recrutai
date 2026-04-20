@@ -16,6 +16,8 @@
   --color-status-red-bg: #FEE2E2;
   --color-status-amber: #CC8C00;
   --color-status-amber-bg: #FEF3C7;
+  --color-status-blue: #0369A1;
+  --color-status-blue-bg: #E0F2FE;
 }
 
 html, body {
