@@ -45,7 +45,8 @@ export async function sendQualifiedCandidateEmail({
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; color: #1F2937;">
       <h2 style="color: #7C3AED; margin-bottom: 24px;">Nouveau CV qualifié</h2>
       <p style="font-size: 16px; margin-bottom: 24px;">
-        Un candidat vient d'atteindre le seuil de qualification IA pour l'offre
+        <strong>${escapeHtml(candidateName)}</strong> vient d'atteindre le
+        seuil de qualification IA pour l'offre
         <strong>${escapeHtml(offreTitle)}</strong>.
       </p>
       <table style="border-collapse: collapse; width: 100%; margin-bottom: 24px;">
