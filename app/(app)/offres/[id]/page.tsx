@@ -15,7 +15,6 @@ type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ error?: string; saved?: string }>
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
-const STATUTS = ['actif', 'clos']
 
 export default async function OffreDetailPage({
   params,
@@ -101,10 +100,11 @@ export default async function OffreDetailPage({
           Modifications enregistrées.
         </div>
       )}
-      {autoClosed && (
+      {effectiveOffreStatut === 'clos' && (
         <div className="px-3 py-2 rounded-md bg-status-amber-bg text-status-amber text-sm">
-          Offre clôturée automatiquement : la date de validité est dépassée.
-          Modifie-la ci-dessous pour la réactiver.
+          {autoClosed
+            ? 'Offre clôturée automatiquement : la date de validité est dépassée. Modifie-la ci-dessous pour la réactiver.'
+            : "Offre clôturée. Pour la réactiver, mets une date de validité dans le futur ci-dessous."}
         </div>
       )}
 
@@ -281,7 +281,7 @@ export default async function OffreDetailPage({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label
               htmlFor="contrat"
@@ -336,26 +336,10 @@ export default async function OffreDetailPage({
               defaultValue={offre.date_validite ?? ''}
               className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
             />
-          </div>
-          <div>
-            <label
-              htmlFor="statut"
-              className="block text-sm font-medium text-brand-indigo-text mb-1"
-            >
-              Statut
-            </label>
-            <select
-              id="statut"
-              name="statut"
-              defaultValue={offre.statut ?? 'actif'}
-              className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
-            >
-              {STATUTS.map((s) => (
-                <option key={s} value={s}>
-                  {s === 'actif' ? 'Active' : 'Clôturée'}
-                </option>
-              ))}
-            </select>
+            <p className="text-xs text-muted mt-1">
+              Statut déterminé par la date : active si la date est future,
+              clôturée automatiquement sinon.
+            </p>
           </div>
         </div>
 

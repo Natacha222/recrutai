@@ -8,7 +8,6 @@ import { sendQualifiedCandidateEmail } from '@/lib/email'
 import { effectiveStatut, todayIso } from '@/lib/format'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
-const STATUTS = ['actif', 'clos']
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -22,8 +21,6 @@ export async function updateOffre(formData: FormData) {
   const lieu = String(formData.get('lieu') ?? '').trim() || null
   const contratRaw = String(formData.get('contrat') ?? '').trim()
   const contrat = CONTRATS.includes(contratRaw) ? contratRaw : 'CDI'
-  const statutRaw = String(formData.get('statut') ?? '').trim()
-  const statut = STATUTS.includes(statutRaw) ? statutRaw : 'actif'
   const seuilRaw = Number(formData.get('seuil') ?? 60)
   const seuil = Number.isFinite(seuilRaw)
     ? Math.min(100, Math.max(0, Math.round(seuilRaw)))
@@ -50,6 +47,11 @@ export async function updateOffre(formData: FormData) {
     )
   }
 
+  // La date future est déjà validée plus haut : sauvegarder une offre avec
+  // une date valide signifie qu'elle est active. Une éventuelle clôture
+  // manuelle (« clos » en DB) est donc réinitialisée à chaque édition, ce
+  // qui permet à l'utilisateur de réactiver une offre en mettant simplement
+  // une date ultérieure.
   const { error } = await supabase
     .from('offres')
     .update({
@@ -58,7 +60,7 @@ export async function updateOffre(formData: FormData) {
       description,
       lieu,
       contrat,
-      statut,
+      statut: 'actif',
       seuil,
       date_validite,
     })
