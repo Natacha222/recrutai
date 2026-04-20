@@ -72,13 +72,25 @@ function emailFromName(name: string): string {
   return normalized ? `${normalized}@example.com` : 'candidat@example.com'
 }
 
+export type IngestResult =
+  | {
+      ok: true
+      notifications: {
+        qualifiedCount: number
+        sentCount: number
+        errors: string[]
+        skippedReason?: string
+      }
+    }
+  | { ok: false; error: string }
+
 export async function ingestCVs({
   offreId,
   uploads,
 }: {
   offreId: string
   uploads: { path: string; filename: string }[]
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<IngestResult> {
   if (!offreId || uploads.length === 0) {
     return { ok: false, error: 'Aucun fichier à traiter.' }
   }
@@ -153,18 +165,33 @@ export async function ingestCVs({
   const override = process.env.NOTIFICATION_EMAIL_OVERRIDE
   const notifTo = override || clientInfo?.contact_email || null
 
-  if (notifTo) {
-    const qualified = prepared.filter((p) => p.row.statut === 'qualifié')
-    await Promise.allSettled(
+  const qualified = prepared.filter((p) => p.row.statut === 'qualifié')
+  const notifErrors: string[] = []
+  let sentCount = 0
+  let skippedReason: string | undefined
+
+  if (!notifTo) {
+    skippedReason =
+      "Aucune adresse de notification (NOTIFICATION_EMAIL_OVERRIDE non défini et clients.contact_email manquant)."
+    console.warn(`[ingestCVs] ${skippedReason}`)
+  } else if (!process.env.RESEND_API_KEY) {
+    skippedReason = 'RESEND_API_KEY non défini côté serveur.'
+    console.warn(`[ingestCVs] ${skippedReason}`)
+  } else if (qualified.length === 0) {
+    skippedReason = 'Aucun CV n\'a atteint le seuil.'
+  } else {
+    const results = await Promise.allSettled(
       qualified.map(async (p) => {
         const { data: blob, error: dlErr } = await supabase.storage
           .from('cvs')
           .download(p.upload.path)
-        if (dlErr || !blob) return
+        if (dlErr || !blob) {
+          throw new Error(`Téléchargement CV : ${dlErr?.message ?? 'blob vide'}`)
+        }
         const arrayBuffer = await blob.arrayBuffer()
         const cvBuffer = Buffer.from(arrayBuffer)
 
-        await sendQualifiedCandidateEmail({
+        const res = await sendQualifiedCandidateEmail({
           to: notifTo,
           offreTitle: offre.titre,
           candidateName: p.row.nom,
@@ -175,12 +202,30 @@ export async function ingestCVs({
           cvBuffer,
           cvFilename: p.upload.filename,
         })
+        if (!res.ok) throw new Error(res.error)
       })
     )
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        sentCount += 1
+      } else {
+        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason)
+        console.error(`[ingestCVs] envoi email échoué : ${msg}`)
+        notifErrors.push(msg)
+      }
+    }
   }
 
   revalidatePath(`/offres/${offreId}`)
   revalidatePath('/offres')
   revalidatePath('/dashboard')
-  return { ok: true }
+  return {
+    ok: true,
+    notifications: {
+      qualifiedCount: qualified.length,
+      sentCount,
+      errors: notifErrors,
+      skippedReason,
+    },
+  }
 }

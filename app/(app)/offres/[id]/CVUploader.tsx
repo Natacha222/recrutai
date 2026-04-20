@@ -56,12 +56,31 @@ export default function CVUploader({ offreId }: { offreId: string }) {
       const result = await ingestCVs({ offreId, uploads })
       if (!result.ok) throw new Error(result.error)
 
-      setStatus('done')
-      setMessage(
-        `${uploads.length} CV${uploads.length > 1 ? 's' : ''} ajouté${
-          uploads.length > 1 ? 's' : ''
-        } et scoré${uploads.length > 1 ? 's' : ''}.`
-      )
+      const n = result.notifications
+      const plural = uploads.length > 1 ? 's' : ''
+      const parts: string[] = [
+        `${uploads.length} CV${plural} ajouté${plural} et scoré${plural}.`,
+      ]
+      if (n.qualifiedCount > 0) {
+        if (n.sentCount > 0) {
+          parts.push(
+            `${n.sentCount} email${n.sentCount > 1 ? 's' : ''} envoyé${
+              n.sentCount > 1 ? 's' : ''
+            } pour les CV qualifiés.`
+          )
+        }
+        if (n.errors.length > 0) {
+          parts.push(
+            `${n.errors.length} envoi${n.errors.length > 1 ? 's' : ''} échoué${
+              n.errors.length > 1 ? 's' : ''
+            } : ${n.errors.join(' ; ')}`
+          )
+        }
+      }
+      if (n.skippedReason) parts.push(n.skippedReason)
+
+      setStatus(n.errors.length > 0 ? 'error' : 'done')
+      setMessage(parts.join(' '))
       if (inputRef.current) inputRef.current.value = ''
     } catch (e) {
       const err = e as Error
