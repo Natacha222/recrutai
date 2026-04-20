@@ -41,16 +41,38 @@ export async function sendQualifiedCandidateEmail({
 
   const subject = `${offreTitle} - nouveau CV qualifié`
 
+  const displayName = candidateName?.trim() || 'Un nouveau candidat'
+  const hasRealEmail =
+    !!candidateEmail &&
+    !candidateEmail.endsWith('@example.com')
+
+  const justificationHtml = escapeHtml(justification).replace(/\n/g, '<br />')
+
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; color: #1F2937;">
       <h2 style="color: #7C3AED; margin-bottom: 24px;">Nouveau CV qualifié</h2>
       <p style="font-size: 16px; margin-bottom: 24px;">
-        Un nouveau candidat vient d'atteindre le seuil de qualification IA
-        pour l'offre <strong>${escapeHtml(offreTitle)}</strong>.
+        <strong>${escapeHtml(displayName)}</strong> vient d'atteindre le seuil
+        de qualification IA pour l'offre
+        <strong>${escapeHtml(offreTitle)}</strong>.
       </p>
       <table style="border-collapse: collapse; width: 100%; margin-bottom: 24px;">
         <tr>
-          <td style="padding: 8px 0; color: #6B7280; width: 180px;">Score IA</td>
+          <td style="padding: 8px 0; color: #6B7280; width: 180px;">Candidat</td>
+          <td style="padding: 8px 0; font-weight: 600;">${escapeHtml(displayName)}</td>
+        </tr>
+        ${
+          hasRealEmail
+            ? `<tr>
+          <td style="padding: 8px 0; color: #6B7280;">Email</td>
+          <td style="padding: 8px 0;">
+            <a href="mailto:${escapeHtml(candidateEmail)}" style="color: #7C3AED; text-decoration: none;">${escapeHtml(candidateEmail)}</a>
+          </td>
+        </tr>`
+            : ''
+        }
+        <tr>
+          <td style="padding: 8px 0; color: #6B7280;">Score IA</td>
           <td style="padding: 8px 0;">
             <span style="font-size: 20px; font-weight: 700; color: #10B981;">${score}</span>
             <span style="color: #6B7280;"> / 100 (seuil : ${seuil})</span>
@@ -59,7 +81,7 @@ export async function sendQualifiedCandidateEmail({
       </table>
       <div style="background: #F5F3FF; border-left: 4px solid #7C3AED; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
         <div style="font-weight: 600; color: #7C3AED; margin-bottom: 8px;">Analyse IA</div>
-        <div style="color: #1F2937; line-height: 1.5;">${escapeHtml(justification)}</div>
+        <div style="color: #1F2937; line-height: 1.5;">${justificationHtml}</div>
       </div>
       <p style="color: #6B7280; font-size: 14px;">
         Le CV du candidat est joint à cet email au format PDF.

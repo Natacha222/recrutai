@@ -107,8 +107,10 @@ export async function ingestCVs({
     return { ok: false, error: "Offre introuvable." }
   }
 
-  // Génère une URL signée longue durée pour chaque CV (30 jours) +
-  // prépare les données à envoyer par email pour les candidats qualifiés.
+  // Pour chaque upload : télécharge le PDF une seule fois (réutilisé pour le
+  // scoring IA + la pièce jointe email), génère une URL signée longue durée
+  // pour l'affichage, et lance le scoring IA (score + justification + nom +
+  // email candidat) à partir du contenu réel du PDF.
   type Prepared = {
     row: {
       offre_id: string
@@ -120,21 +122,54 @@ export async function ingestCVs({
       cv_url: string | null
     }
     upload: { path: string; filename: string }
+    cvBuffer: Buffer
   }
 
   const prepared: Prepared[] = await Promise.all(
     uploads.map(async (u) => {
+      // 1) Télécharge le PDF depuis Storage
+      const { data: blob, error: dlErr } = await supabase.storage
+        .from('cvs')
+        .download(u.path)
+      if (dlErr || !blob) {
+        throw new Error(
+          `Téléchargement ${u.filename} : ${dlErr?.message ?? 'blob vide'}`
+        )
+      }
+      const arrayBuffer = await blob.arrayBuffer()
+      const cvBuffer = Buffer.from(arrayBuffer)
+
+      // 2) URL signée longue durée (30 jours) pour le tableau des candidatures
       const { data: signed } = await supabase.storage
         .from('cvs')
         .createSignedUrl(u.path, 60 * 60 * 24 * 30)
 
-      const nom = candidateNameFromFilename(u.filename)
-      const email = emailFromName(nom)
-      const { score, justification, statut } = scoreCandidate({
-        filename: u.filename,
-        jobDescription: offre.description,
-        seuil: offre.seuil,
-      })
+      // 3) Scoring IA sur le PDF — on isole les erreurs pour ne pas casser
+      //    tout le batch si un CV pose problème.
+      let score = 0
+      let justification = ''
+      let statut = 'en attente'
+      let extractedName: string | undefined
+      let extractedEmail: string | undefined
+      try {
+        const res = await scoreCandidate({
+          cvBuffer,
+          jobDescription: offre.description,
+          seuil: offre.seuil,
+        })
+        score = res.score
+        justification = res.justification
+        statut = res.statut
+        extractedName = res.candidateName
+        extractedEmail = res.candidateEmail
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error(`[ingestCVs] scoring IA échoué (${u.filename}) :`, msg)
+        justification = `Scoring IA indisponible : ${msg}`
+      }
+
+      const nom = extractedName || candidateNameFromFilename(u.filename)
+      const email = extractedEmail || emailFromName(nom)
 
       return {
         row: {
@@ -147,6 +182,7 @@ export async function ingestCVs({
           cv_url: signed?.signedUrl ?? null,
         },
         upload: u,
+        cvBuffer,
       }
     })
   )
@@ -182,15 +218,6 @@ export async function ingestCVs({
   } else {
     const results = await Promise.allSettled(
       qualified.map(async (p) => {
-        const { data: blob, error: dlErr } = await supabase.storage
-          .from('cvs')
-          .download(p.upload.path)
-        if (dlErr || !blob) {
-          throw new Error(`Téléchargement CV : ${dlErr?.message ?? 'blob vide'}`)
-        }
-        const arrayBuffer = await blob.arrayBuffer()
-        const cvBuffer = Buffer.from(arrayBuffer)
-
         const res = await sendQualifiedCandidateEmail({
           to: notifTo,
           offreTitle: offre.titre,
@@ -199,7 +226,7 @@ export async function ingestCVs({
           score: p.row.score_ia,
           seuil: offre.seuil,
           justification: p.row.justification_ia,
-          cvBuffer,
+          cvBuffer: p.cvBuffer,
           cvFilename: p.upload.filename,
         })
         if (!res.ok) throw new Error(res.error)
