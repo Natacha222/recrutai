@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { scoreCandidate } from '@/lib/scoring'
+import { sendQualifiedCandidateEmail } from '@/lib/email'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 const STATUTS = ['actif', 'clos']
@@ -86,7 +87,7 @@ export async function ingestCVs({
 
   const { data: offre, error: offreErr } = await supabase
     .from('offres')
-    .select('id, description, seuil')
+    .select('id, titre, description, seuil, clients(contact_email)')
     .eq('id', offreId)
     .single()
 
@@ -94,8 +95,22 @@ export async function ingestCVs({
     return { ok: false, error: "Offre introuvable." }
   }
 
-  // Génère une URL signée longue durée pour chaque CV (30 jours)
-  const rows = await Promise.all(
+  // Génère une URL signée longue durée pour chaque CV (30 jours) +
+  // prépare les données à envoyer par email pour les candidats qualifiés.
+  type Prepared = {
+    row: {
+      offre_id: string
+      nom: string
+      email: string
+      score_ia: number
+      justification_ia: string
+      statut: string
+      cv_url: string | null
+    }
+    upload: { path: string; filename: string }
+  }
+
+  const prepared: Prepared[] = await Promise.all(
     uploads.map(async (u) => {
       const { data: signed } = await supabase.storage
         .from('cvs')
@@ -110,20 +125,58 @@ export async function ingestCVs({
       })
 
       return {
-        offre_id: offreId,
-        nom,
-        email,
-        score_ia: score,
-        justification_ia: justification,
-        statut,
-        cv_url: signed?.signedUrl ?? null,
+        row: {
+          offre_id: offreId,
+          nom,
+          email,
+          score_ia: score,
+          justification_ia: justification,
+          statut,
+          cv_url: signed?.signedUrl ?? null,
+        },
+        upload: u,
       }
     })
   )
 
-  const { error } = await supabase.from('candidatures').insert(rows)
+  const { error } = await supabase
+    .from('candidatures')
+    .insert(prepared.map((p) => p.row))
   if (error) {
     return { ok: false, error: error.message }
+  }
+
+  // Notification email pour chaque CV qualifié (≥ seuil)
+  const clientInfo = Array.isArray(offre.clients)
+    ? offre.clients[0]
+    : (offre.clients as { contact_email: string | null } | null)
+  const override = process.env.NOTIFICATION_EMAIL_OVERRIDE
+  const notifTo = override || clientInfo?.contact_email || null
+
+  if (notifTo) {
+    const qualified = prepared.filter((p) => p.row.statut === 'qualifié')
+    await Promise.allSettled(
+      qualified.map(async (p) => {
+        const { data: blob, error: dlErr } = await supabase.storage
+          .from('cvs')
+          .download(p.upload.path)
+        if (dlErr || !blob) return
+        const arrayBuffer = await blob.arrayBuffer()
+        const cvBuffer = Buffer.from(arrayBuffer)
+
+        await sendQualifiedCandidateEmail({
+          to: notifTo,
+          offreTitle: offre.titre,
+          candidateName: p.row.nom,
+          candidateEmail: p.row.email,
+          score: p.row.score_ia,
+          seuil: offre.seuil,
+          justification: p.row.justification_ia,
+          cvBuffer,
+          cvFilename: p.upload.filename,
+        })
+      })
+    )
   }
 
   revalidatePath(`/offres/${offreId}`)
