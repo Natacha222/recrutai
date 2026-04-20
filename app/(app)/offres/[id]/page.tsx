@@ -51,6 +51,8 @@ export default async function OffreDetailPage({
     candidatures?.filter((c) => c.statut === 'qualifié').length ?? 0
   const rejetes =
     candidatures?.filter((c) => c.statut === 'rejeté').length ?? 0
+  const enAttente =
+    candidatures?.filter((c) => c.statut === 'en attente').length ?? 0
 
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0)
 
@@ -89,13 +91,19 @@ export default async function OffreDetailPage({
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Kpi label="CV reçus" value={total} />
         <Kpi
           label="CV qualifiés"
           value={qualifies}
           sub={`${pct(qualifies)}% du total`}
           color="text-status-green"
+        />
+        <Kpi
+          label="En attente"
+          value={enAttente}
+          sub={`${pct(enAttente)}% du total`}
+          color="text-status-amber"
         />
         <Kpi
           label="CV rejetés"
