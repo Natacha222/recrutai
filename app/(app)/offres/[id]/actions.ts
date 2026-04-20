@@ -160,6 +160,8 @@ export async function ingestCVs({
       justification_ia: string
       statut: string
       cv_url: string | null
+      cv_path: string
+      cv_filename: string
     }
     upload: { path: string; filename: string }
     cvBuffer: Buffer
@@ -220,6 +222,8 @@ export async function ingestCVs({
           justification_ia: justification,
           statut,
           cv_url: signed?.signedUrl ?? null,
+          cv_path: u.path,
+          cv_filename: u.filename,
         },
         upload: u,
         cvBuffer,
@@ -295,4 +299,151 @@ export async function ingestCVs({
       skippedReason,
     },
   }
+}
+
+/**
+ * Qualifie manuellement une candidature en attente : passe son statut à
+ * « qualifié » et envoie l'email de notification au client avec le PDF
+ * en pièce jointe. Utilisé quand un recruteur valide un CV après revue
+ * manuelle (le score IA n'avait pas atteint le seuil mais la fiche est
+ * quand même pertinente).
+ */
+export type PromoteResult =
+  | { ok: true; emailSent: boolean; skippedReason?: string }
+  | { ok: false; error: string }
+
+export async function qualifyCandidature(
+  candidatureId: string
+): Promise<PromoteResult> {
+  if (!candidatureId) return { ok: false, error: 'Candidature introuvable.' }
+
+  const supabase = await createClient()
+
+  const { data: cand, error: candErr } = await supabase
+    .from('candidatures')
+    .select(
+      'id, offre_id, nom, email, score_ia, justification_ia, cv_path, cv_filename'
+    )
+    .eq('id', candidatureId)
+    .single()
+
+  if (candErr || !cand) {
+    return { ok: false, error: 'Candidature introuvable.' }
+  }
+
+  const { data: offre, error: offreErr } = await supabase
+    .from('offres')
+    .select('id, titre, seuil, clients(contact_email)')
+    .eq('id', cand.offre_id)
+    .single()
+
+  if (offreErr || !offre) {
+    return { ok: false, error: "Offre introuvable." }
+  }
+
+  // Passe le statut à qualifié
+  const { error: updErr } = await supabase
+    .from('candidatures')
+    .update({ statut: 'qualifié' })
+    .eq('id', candidatureId)
+
+  if (updErr) return { ok: false, error: updErr.message }
+
+  revalidatePath(`/offres/${cand.offre_id}`)
+  revalidatePath('/dashboard')
+
+  // Prépare l'envoi email
+  const clientInfo = Array.isArray(offre.clients)
+    ? offre.clients[0]
+    : (offre.clients as { contact_email: string | null } | null)
+  const override = process.env.NOTIFICATION_EMAIL_OVERRIDE
+  const notifTo = override || clientInfo?.contact_email || null
+
+  if (!notifTo) {
+    return {
+      ok: true,
+      emailSent: false,
+      skippedReason:
+        "Aucune adresse de notification (NOTIFICATION_EMAIL_OVERRIDE non défini et clients.contact_email manquant).",
+    }
+  }
+  if (!process.env.RESEND_API_KEY) {
+    return {
+      ok: true,
+      emailSent: false,
+      skippedReason: 'RESEND_API_KEY non défini côté serveur.',
+    }
+  }
+  if (!cand.cv_path) {
+    return {
+      ok: true,
+      emailSent: false,
+      skippedReason:
+        "CV introuvable dans le storage (candidature importée avant l'ajout de cv_path).",
+    }
+  }
+
+  // Télécharge le PDF du CV pour la pièce jointe
+  const { data: blob, error: dlErr } = await supabase.storage
+    .from('cvs')
+    .download(cand.cv_path)
+  if (dlErr || !blob) {
+    return {
+      ok: true,
+      emailSent: false,
+      skippedReason: `Téléchargement CV échoué : ${dlErr?.message ?? 'blob vide'}`,
+    }
+  }
+  const arrayBuffer = await blob.arrayBuffer()
+  const cvBuffer = Buffer.from(arrayBuffer)
+
+  const res = await sendQualifiedCandidateEmail({
+    to: notifTo,
+    offreTitle: offre.titre,
+    candidateName: cand.nom,
+    candidateEmail: cand.email ?? '',
+    score: cand.score_ia ?? 0,
+    seuil: offre.seuil,
+    justification: cand.justification_ia ?? '',
+    cvBuffer,
+    cvFilename: cand.cv_filename || `CV-${cand.nom}.pdf`,
+  })
+
+  if (!res.ok) {
+    return { ok: true, emailSent: false, skippedReason: res.error }
+  }
+  return { ok: true, emailSent: true }
+}
+
+/**
+ * Rejette manuellement une candidature en attente : passe son statut à
+ * « rejeté » sans envoyer d'email au client.
+ */
+export async function rejectCandidature(
+  candidatureId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!candidatureId) return { ok: false, error: 'Candidature introuvable.' }
+
+  const supabase = await createClient()
+
+  const { data: cand, error: candErr } = await supabase
+    .from('candidatures')
+    .select('id, offre_id')
+    .eq('id', candidatureId)
+    .single()
+
+  if (candErr || !cand) {
+    return { ok: false, error: 'Candidature introuvable.' }
+  }
+
+  const { error } = await supabase
+    .from('candidatures')
+    .update({ statut: 'rejeté' })
+    .eq('id', candidatureId)
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/offres/${cand.offre_id}`)
+  revalidatePath('/dashboard')
+  return { ok: true }
 }

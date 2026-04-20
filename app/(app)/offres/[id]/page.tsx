@@ -9,10 +9,18 @@ import {
   todayIso,
 } from '@/lib/format'
 import CVUploader from './CVUploader'
+import CandidatureActions from './CandidatureActions'
 import { updateOffre } from './actions'
 
+type CandidatureFilter = 'qualifié' | 'en attente' | 'rejeté'
+const FILTERS: CandidatureFilter[] = ['qualifié', 'en attente', 'rejeté']
+
 type Params = Promise<{ id: string }>
-type SearchParams = Promise<{ error?: string; saved?: string }>
+type SearchParams = Promise<{
+  error?: string
+  saved?: string
+  filter?: string
+}>
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 
@@ -24,7 +32,12 @@ export default async function OffreDetailPage({
   searchParams: SearchParams
 }) {
   const { id } = await params
-  const { error, saved } = await searchParams
+  const { error, saved, filter } = await searchParams
+  const activeFilter: CandidatureFilter | null = FILTERS.includes(
+    filter as CandidatureFilter
+  )
+    ? (filter as CandidatureFilter)
+    : null
   const supabase = await createClient()
 
   const { data: offre } = await supabase
@@ -59,6 +72,11 @@ export default async function OffreDetailPage({
     candidatures?.filter((c) => c.statut === 'en attente').length ?? 0
 
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0)
+
+  // Filtre appliqué au tableau si l'utilisateur a cliqué sur un KPI
+  const filteredCandidatures = activeFilter
+    ? (candidatures ?? []).filter((c) => c.statut === activeFilter)
+    : (candidatures ?? [])
 
   const clientInfo = Array.isArray(offre.clients)
     ? offre.clients[0]
@@ -108,26 +126,37 @@ export default async function OffreDetailPage({
         </div>
       )}
 
-      {/* KPIs */}
+      {/* KPIs — cliquables pour filtrer le tableau des candidatures */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Kpi label="CV reçus" value={total} />
+        <Kpi
+          label="CV reçus"
+          value={total}
+          href={`/offres/${offre.id}`}
+          active={activeFilter === null}
+        />
         <Kpi
           label="CV qualifiés"
           value={qualifies}
           sub={`${pct(qualifies)}% du total`}
           color="text-status-green"
+          href={`/offres/${offre.id}?filter=qualifi%C3%A9`}
+          active={activeFilter === 'qualifié'}
         />
         <Kpi
           label="En attente"
           value={enAttente}
           sub={`${pct(enAttente)}% du total`}
           color="text-status-amber"
+          href={`/offres/${offre.id}?filter=en+attente`}
+          active={activeFilter === 'en attente'}
         />
         <Kpi
           label="CV rejetés"
           value={rejetes}
           sub={`${pct(rejetes)}% du total`}
           color="text-status-red"
+          href={`/offres/${offre.id}?filter=rejet%C3%A9`}
+          active={activeFilter === 'rejeté'}
         />
         <Kpi
           label="Seuil de qualification"
@@ -142,10 +171,22 @@ export default async function OffreDetailPage({
         disabled={effectiveOffreStatut === 'clos'}
       />
 
-      {/* Candidatures */}
+      {/* Candidatures — filtrables via les KPIs */}
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
-        <div className="px-6 py-4 border-b border-border-soft">
-          <h2 className="font-semibold">Candidatures reçues ({total})</h2>
+        <div className="px-6 py-4 border-b border-border-soft flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="font-semibold">
+            {activeFilter
+              ? `Candidatures « ${activeFilter} » (${filteredCandidatures.length})`
+              : `Candidatures reçues (${total})`}
+          </h2>
+          {activeFilter && (
+            <Link
+              href={`/offres/${offre.id}`}
+              className="text-xs text-brand-purple hover:underline"
+            >
+              ← Voir toutes les candidatures
+            </Link>
+          )}
         </div>
         <table className="w-full">
           <thead className="bg-surface">
@@ -155,11 +196,11 @@ export default async function OffreDetailPage({
               <th className="px-6 py-3 w-1/3">Justification IA</th>
               <th className="px-6 py-3">Statut</th>
               <th className="px-6 py-3">Reçu le</th>
-              <th className="px-6 py-3">CV</th>
+              <th className="px-6 py-3">CV / Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-soft">
-            {candidatures?.map((c) => (
+            {filteredCandidatures.map((c) => (
               <tr key={c.id} className="text-sm align-top">
                 <td className="px-6 py-4">
                   <div className="font-medium">{c.nom}</div>
@@ -188,25 +229,32 @@ export default async function OffreDetailPage({
                   {new Date(c.created_at).toLocaleDateString('fr-FR')}
                 </td>
                 <td className="px-6 py-4">
-                  {c.cv_url ? (
-                    <a
-                      href={c.cv_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-brand-purple font-medium"
-                    >
-                      📄 CV
-                    </a>
-                  ) : (
-                    <span className="text-muted text-xs">—</span>
-                  )}
+                  <div className="flex flex-col gap-2">
+                    {c.cv_url ? (
+                      <a
+                        href={c.cv_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-purple text-brand-purple text-xs font-semibold hover:bg-brand-purple hover:text-white transition-colors w-fit"
+                      >
+                        📄 Voir le CV
+                      </a>
+                    ) : (
+                      <span className="text-muted text-xs">—</span>
+                    )}
+                    {c.statut === 'en attente' && (
+                      <CandidatureActions candidatureId={c.id} />
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
-            {(!candidatures || candidatures.length === 0) && (
+            {filteredCandidatures.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-6 py-8 text-center text-muted">
-                  Aucune candidature reçue pour le moment.
+                  {activeFilter
+                    ? `Aucune candidature « ${activeFilter} ».`
+                    : 'Aucune candidature reçue pour le moment.'}
                 </td>
               </tr>
             )}
@@ -384,14 +432,23 @@ function Kpi({
   value,
   sub,
   color,
+  href,
+  active,
 }: {
   label: string
   value: number
   sub?: string
   color?: string
+  href?: string
+  active?: boolean
 }) {
-  return (
-    <div className="bg-surface-alt rounded-xl p-5 border border-border-soft">
+  const base = `rounded-xl p-5 border transition-colors ${
+    active
+      ? 'bg-surface-alt border-brand-purple ring-2 ring-brand-purple/30'
+      : 'bg-surface-alt border-border-soft'
+  }`
+  const inner = (
+    <>
       <div className="text-sm text-muted font-medium">{label}</div>
       <div
         className={`text-3xl font-bold mt-1 ${color ?? 'text-brand-indigo-text'}`}
@@ -399,6 +456,17 @@ function Kpi({
         {value}
       </div>
       {sub && <div className="text-xs text-muted mt-1">{sub}</div>}
-    </div>
+    </>
   )
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`${base} block hover:border-brand-purple hover:shadow-sm`}
+      >
+        {inner}
+      </Link>
+    )
+  }
+  return <div className={base}>{inner}</div>
 }
