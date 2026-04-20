@@ -8,13 +8,20 @@ const styles: Record<string, string> = {
   'clos': 'bg-status-red-bg text-status-red',
 }
 
+// Libellé affiché (différent de la valeur en base pour les statuts d'offre).
+const labels: Record<string, string> = {
+  'actif': 'active',
+  'clos': 'clôturée',
+}
+
 export default function StatusBadge({ status }: { status: Status }) {
   const cls = styles[status] ?? 'bg-gray-100 text-gray-600'
+  const label = labels[status] ?? status
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${cls}`}
     >
-      {status}
+      {label}
     </span>
   )
 }

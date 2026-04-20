@@ -9,6 +9,8 @@ import { sendQualifiedCandidateEmail } from '@/lib/email'
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 const STATUTS = ['actif', 'clos']
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
 export async function updateOffre(formData: FormData) {
   const supabase = await createClient()
 
@@ -25,6 +27,10 @@ export async function updateOffre(formData: FormData) {
   const seuil = Number.isFinite(seuilRaw)
     ? Math.min(100, Math.max(0, Math.round(seuilRaw)))
     : 60
+  const dateValiditeRaw = String(formData.get('date_validite') ?? '').trim()
+  const date_validite = ISO_DATE_RE.test(dateValiditeRaw)
+    ? dateValiditeRaw
+    : null
 
   if (!id) return redirect('/offres?error=Offre+introuvable')
   if (!titre || !client_id) {
@@ -32,10 +38,24 @@ export async function updateOffre(formData: FormData) {
       `/offres/${id}?error=Le+titre+et+le+client+sont+obligatoires`
     )
   }
+  if (!date_validite) {
+    return redirect(
+      `/offres/${id}?error=La+date+de+validit%C3%A9+est+obligatoire`
+    )
+  }
 
   const { error } = await supabase
     .from('offres')
-    .update({ titre, client_id, description, lieu, contrat, statut, seuil })
+    .update({
+      titre,
+      client_id,
+      description,
+      lieu,
+      contrat,
+      statut,
+      seuil,
+      date_validite,
+    })
     .eq('id', id)
 
   if (error) {

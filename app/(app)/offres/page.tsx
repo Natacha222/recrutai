@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import StatusBadge from '@/components/StatusBadge'
+import { formatValidite } from '@/lib/format'
 
 export default async function OffresPage() {
   const supabase = await createClient()
@@ -7,7 +9,7 @@ export default async function OffresPage() {
   const { data: offres } = await supabase
     .from('offres')
     .select(
-      'id, titre, lieu, statut, contrat, seuil, created_at, clients(nom), candidatures(id, statut)'
+      'id, titre, lieu, statut, contrat, seuil, created_at, date_validite, clients(nom), candidatures(id, statut)'
     )
     .order('created_at', { ascending: false })
 
@@ -42,6 +44,8 @@ export default async function OffresPage() {
               <th className="px-6 py-3">Intitulé</th>
               <th className="px-6 py-3">Client</th>
               <th className="px-6 py-3">Contrat</th>
+              <th className="px-6 py-3">Statut</th>
+              <th className="px-6 py-3">Valide jusqu&apos;au</th>
               <th className="px-6 py-3">CV reçus / Qualifiés</th>
               <th className="px-6 py-3">Seuil</th>
               <th className="px-6 py-3">Action</th>
@@ -74,6 +78,12 @@ export default async function OffresPage() {
                   </td>
                   <td className="px-6 py-5 text-muted">{clientNom ?? '—'}</td>
                   <td className="px-6 py-5 text-muted">{o.contrat ?? '—'}</td>
+                  <td className="px-6 py-5">
+                    <StatusBadge status={o.statut ?? 'actif'} />
+                  </td>
+                  <td className="px-6 py-5 text-muted">
+                    {formatValidite(o.date_validite)}
+                  </td>
                   <td className="px-6 py-5 font-semibold">
                     {total} · {qualifies}
                   </td>
@@ -95,7 +105,7 @@ export default async function OffresPage() {
             })}
             {(!offres || offres.length === 0) && (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-muted">
+                <td colSpan={8} className="px-6 py-8 text-center text-muted">
                   Aucune offre pour le moment.
                 </td>
               </tr>

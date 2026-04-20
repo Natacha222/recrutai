@@ -6,7 +6,13 @@ import { ingestCVs } from './actions'
 
 type Status = 'idle' | 'uploading' | 'scoring' | 'done' | 'error'
 
-export default function CVUploader({ offreId }: { offreId: string }) {
+export default function CVUploader({
+  offreId,
+  disabled = false,
+}: {
+  offreId: string
+  disabled?: boolean
+}) {
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>('')
   const [progress, setProgress] = useState<{ current: number; total: number }>({
@@ -16,6 +22,7 @@ export default function CVUploader({ offreId }: { offreId: string }) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   async function handleFiles(files: FileList | null) {
+    if (disabled) return
     if (!files || files.length === 0) return
 
     const pdfFiles = Array.from(files).filter(
@@ -90,6 +97,7 @@ export default function CVUploader({ offreId }: { offreId: string }) {
   }
 
   const isBusy = status === 'uploading' || status === 'scoring'
+  const blocked = disabled || isBusy
 
   return (
     <div className="bg-surface-alt rounded-xl p-6 border border-border-soft">
@@ -97,14 +105,17 @@ export default function CVUploader({ offreId }: { offreId: string }) {
         <div>
           <h2 className="font-semibold mb-1">Joindre des CVs</h2>
           <p className="text-sm text-muted">
-            Dépose un ou plusieurs fichiers PDF. Le scoring IA se lance
-            automatiquement après l&apos;upload.
+            {disabled
+              ? "Cette offre est clôturée. Réactive-la pour pouvoir joindre de nouveaux CVs."
+              : "Dépose un ou plusieurs fichiers PDF. Le scoring IA se lance automatiquement après l'upload."}
           </p>
         </div>
 
         <label
           className={`inline-flex items-center gap-2 px-4 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold whitespace-nowrap ${
-            isBusy ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:opacity-90'
+            blocked
+              ? 'opacity-60 cursor-not-allowed'
+              : 'cursor-pointer hover:opacity-90'
           }`}
         >
           <span>📎 Joindre des CVs</span>
@@ -113,7 +124,7 @@ export default function CVUploader({ offreId }: { offreId: string }) {
             type="file"
             accept="application/pdf"
             multiple
-            disabled={isBusy}
+            disabled={blocked}
             onChange={(e) => handleFiles(e.target.files)}
             className="hidden"
           />

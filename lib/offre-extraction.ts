@@ -6,6 +6,9 @@ export type ExtractedOffre = {
   lieu: string
   contrat: 'CDI' | 'CDD' | 'Alternance' | 'Stage'
   description: string
+  /** Date limite / deadline si mentionnée dans le PDF, au format YYYY-MM-DD.
+   *  Chaîne vide si l'information n'est pas disponible. */
+  date_validite: string
 }
 
 /**
@@ -68,8 +71,20 @@ export async function extractOffreFromPdfBuffer(
                 description:
                   'Description synthétique du poste : missions clés, stack ou compétences attendues, profil recherché. 4 à 8 phrases maximum.',
               },
+              date_validite: {
+                type: 'string',
+                description:
+                  'Date limite de candidature au format YYYY-MM-DD si le document en mentionne une (ex : « candidatures avant le 30/06/2026 », « deadline », « date limite »). Chaîne vide si rien n\'est indiqué — ne devine pas.',
+              },
             },
-            required: ['titre', 'client_nom', 'lieu', 'contrat', 'description'],
+            required: [
+              'titre',
+              'client_nom',
+              'lieu',
+              'contrat',
+              'description',
+              'date_validite',
+            ],
           },
         },
       ],
@@ -88,7 +103,7 @@ export async function extractOffreFromPdfBuffer(
             },
             {
               type: 'text',
-              text: "Extrais les champs de cette offre d'emploi en français. Si une information n'est pas explicite dans le document, fais de ton mieux avec ce qui est disponible (ex : déduis un contrat « CDI » si le type n'est pas précisé).",
+              text: "Extrais les champs de cette offre d'emploi en français. Si une information n'est pas explicite dans le document, fais de ton mieux avec ce qui est disponible (ex : déduis un contrat « CDI » si le type n'est pas précisé). Pour la date limite, ne la renseigne que si elle est clairement indiquée dans le document — sinon laisse la chaîne vide.",
             },
           ],
         },
@@ -100,8 +115,22 @@ export async function extractOffreFromPdfBuffer(
       return { ok: false, error: "L'IA n'a pas pu extraire les champs." }
     }
 
-    const input = toolUse.input as ExtractedOffre
-    return { ok: true, data: input }
+    const raw = toolUse.input as ExtractedOffre
+
+    // Normalise la date : on n'accepte que YYYY-MM-DD. Tout autre format
+    // (DD/MM/YYYY, texte libre, date invalide…) est ignoré et remis à vide
+    // pour laisser l'utilisateur la saisir à la main.
+    const dateClean = /^\d{4}-\d{2}-\d{2}$/.test(raw.date_validite ?? '')
+      ? raw.date_validite
+      : ''
+
+    return {
+      ok: true,
+      data: {
+        ...raw,
+        date_validite: dateClean,
+      },
+    }
   } catch (e) {
     const err = e as Error
     return { ok: false, error: `Erreur Claude : ${err.message}` }

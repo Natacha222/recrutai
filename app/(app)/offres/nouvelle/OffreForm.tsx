@@ -30,6 +30,7 @@ export default function OffreForm({
   const [contrat, setContrat] = useState<Contrat>('CDI')
   const [seuil, setSeuil] = useState<number>(60)
   const [description, setDescription] = useState('')
+  const [dateValidite, setDateValidite] = useState('')
 
   // État de l'import PDF
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
@@ -74,6 +75,9 @@ export default function OffreForm({
     setLieu(result.data.lieu)
     setContrat(result.data.contrat)
     setDescription(result.data.description)
+    if (result.data.date_validite) {
+      setDateValidite(result.data.date_validite)
+    }
 
     if (result.matchedClientId) {
       setClientId(result.matchedClientId)
@@ -105,7 +109,8 @@ export default function OffreForm({
     clientId !== '' &&
     lieu.trim() !== '' &&
     description.trim() !== '' &&
-    Number.isFinite(seuil)
+    Number.isFinite(seuil) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(dateValidite)
 
   return (
     <>
@@ -217,7 +222,7 @@ export default function OffreForm({
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label
               htmlFor="lieu"
@@ -275,6 +280,23 @@ export default function OffreForm({
               required
               value={seuil}
               onChange={(e) => setSeuil(Number(e.target.value))}
+              className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="date_validite"
+              className="block text-sm font-medium text-brand-indigo-text mb-1"
+            >
+              Valide jusqu&apos;au <span className="text-status-red">*</span>
+            </label>
+            <input
+              id="date_validite"
+              name="date_validite"
+              type="date"
+              required
+              value={dateValidite}
+              onChange={(e) => setDateValidite(e.target.value)}
               className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
             />
           </div>

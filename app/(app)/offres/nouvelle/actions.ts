@@ -10,6 +10,7 @@ import {
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export async function createOffre(formData: FormData) {
   const supabase = await createClient()
@@ -24,8 +25,12 @@ export async function createOffre(formData: FormData) {
   const seuil = Number.isFinite(seuilRaw)
     ? Math.min(100, Math.max(0, Math.round(seuilRaw)))
     : 60
+  const dateValiditeRaw = String(formData.get('date_validite') ?? '').trim()
+  const date_validite = ISO_DATE_RE.test(dateValiditeRaw)
+    ? dateValiditeRaw
+    : null
 
-  if (!titre || !client_id || !lieu || !description) {
+  if (!titre || !client_id || !lieu || !description || !date_validite) {
     return redirect(
       '/offres/nouvelle?error=Tous+les+champs+sont+obligatoires'
     )
@@ -41,6 +46,7 @@ export async function createOffre(formData: FormData) {
       statut: 'actif',
       contrat,
       seuil,
+      date_validite,
     })
     .select('id')
     .single()

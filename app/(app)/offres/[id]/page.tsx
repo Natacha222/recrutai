@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
+import { formatValidite } from '@/lib/format'
 import CVUploader from './CVUploader'
 import { updateOffre } from './actions'
 
@@ -25,7 +26,7 @@ export default async function OffreDetailPage({
   const { data: offre } = await supabase
     .from('offres')
     .select(
-      'id, titre, description, lieu, statut, contrat, seuil, client_id, clients(nom, secteur)'
+      'id, titre, description, lieu, statut, contrat, seuil, date_validite, client_id, clients(nom, secteur)'
     )
     .eq('id', id)
     .single()
@@ -66,8 +67,14 @@ export default async function OffreDetailPage({
         <div className="text-sm text-muted mt-2">
           {clientInfo?.nom}
           {offre.lieu ? ` · ${offre.lieu}` : ''}
+          {offre.date_validite
+            ? ` · Valide jusqu'au ${formatValidite(offre.date_validite)}`
+            : ''}
         </div>
-        <h1 className="text-2xl font-bold">{offre.titre}</h1>
+        <div className="flex items-center gap-3 flex-wrap mt-1">
+          <h1 className="text-2xl font-bold">{offre.titre}</h1>
+          <StatusBadge status={offre.statut ?? 'actif'} />
+        </div>
       </div>
 
       {error && (
@@ -103,8 +110,11 @@ export default async function OffreDetailPage({
         />
       </div>
 
-      {/* Uploader CV */}
-      <CVUploader offreId={offre.id} />
+      {/* Uploader CV — désactivé quand l'offre est clôturée */}
+      <CVUploader
+        offreId={offre.id}
+        disabled={offre.statut === 'clos'}
+      />
 
       {/* Candidatures */}
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
@@ -245,7 +255,7 @@ export default async function OffreDetailPage({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label
               htmlFor="contrat"
@@ -281,6 +291,22 @@ export default async function OffreDetailPage({
               max={100}
               step={1}
               defaultValue={offre.seuil ?? 60}
+              className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="date_validite"
+              className="block text-sm font-medium text-brand-indigo-text mb-1"
+            >
+              Valide jusqu&apos;au <span className="text-status-red">*</span>
+            </label>
+            <input
+              id="date_validite"
+              name="date_validite"
+              type="date"
+              required
+              defaultValue={offre.date_validite ?? ''}
               className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
             />
           </div>
