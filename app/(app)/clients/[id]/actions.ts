@@ -40,5 +40,5 @@ export async function updateClient(formData: FormData) {
 
   revalidatePath('/clients')
   revalidatePath(`/clients/${id}`)
-  redirect(`/clients/${id}?updated=1`)
+  redirect(`/clients?saved=${encodeURIComponent(nom)}`)
 }

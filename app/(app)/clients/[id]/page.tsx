@@ -5,7 +5,7 @@ import { updateClient } from './actions'
 import StatusBadge from '@/components/StatusBadge'
 
 type Params = Promise<{ id: string }>
-type SearchParams = Promise<{ error?: string; updated?: string }>
+type SearchParams = Promise<{ error?: string }>
 
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
 
@@ -17,7 +17,7 @@ export default async function ClientDetailPage({
   searchParams: SearchParams
 }) {
   const { id } = await params
-  const { error, updated } = await searchParams
+  const { error } = await searchParams
   const supabase = await createClient()
 
   const { data: client } = await supabase
@@ -52,12 +52,6 @@ export default async function ClientDetailPage({
       {error && (
         <div className="px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
           {error}
-        </div>
-      )}
-
-      {updated && (
-        <div className="px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
-          Modifications enregistrées.
         </div>
       )}
 
@@ -130,10 +124,16 @@ export default async function ClientDetailPage({
 
       {/* Offres associées */}
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
-        <div className="px-6 py-4 border-b border-border-soft">
+        <div className="px-6 py-4 border-b border-border-soft flex items-center justify-between gap-4">
           <h2 className="font-semibold">
             Offres associées ({offres?.length ?? 0})
           </h2>
+          <Link
+            href={`/offres/nouvelle?client_id=${client.id}`}
+            className="px-3 py-1.5 bg-brand-purple text-white rounded-md text-xs font-semibold hover:opacity-90 whitespace-nowrap"
+          >
+            + Créer une offre d&apos;emploi
+          </Link>
         </div>
         <ul className="divide-y divide-border-soft">
           {offres?.map((o) => (

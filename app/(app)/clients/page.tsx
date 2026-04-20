@@ -3,7 +3,14 @@ import { createClient } from '@/lib/supabase/server'
 import FormuleBadge from '@/components/FormuleBadge'
 import ClickableRow from '@/components/ClickableRow'
 
-export default async function ClientsPage() {
+type SearchParams = Promise<{ saved?: string; error?: string }>
+
+export default async function ClientsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams
+}) {
+  const { saved, error } = await searchParams
   const supabase = await createClient()
   const { data: clients } = await supabase
     .from('clients')
@@ -32,6 +39,18 @@ export default async function ClientsPage() {
           + Nouveau client
         </Link>
       </div>
+
+      {saved && (
+        <div className="mb-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
+          Client «&nbsp;{saved}&nbsp;» mis à jour.
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
+          {error}
+        </div>
+      )}
 
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
         <table className="w-full">

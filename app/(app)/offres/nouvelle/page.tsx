@@ -2,14 +2,14 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { createOffre } from './actions'
 
-type SearchParams = Promise<{ error?: string }>
+type SearchParams = Promise<{ error?: string; client_id?: string }>
 
 export default async function NouvelleOffrePage({
   searchParams,
 }: {
   searchParams: SearchParams
 }) {
-  const { error } = await searchParams
+  const { error, client_id } = await searchParams
   const supabase = await createClient()
   const { data: clients } = await supabase
     .from('clients')
@@ -57,6 +57,7 @@ export default async function NouvelleOffrePage({
             id="client_id"
             name="client_id"
             required
+            defaultValue={client_id ?? ''}
             className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
           >
             <option value="">— Sélectionnez un client —</option>

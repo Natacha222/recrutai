@@ -22,14 +22,17 @@ export async function createClientAction(formData: FormData) {
     return redirect('/clients/nouveau?error=Le+nom+est+obligatoire')
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('clients')
     .insert({ nom, secteur, contact_email, formule, am_referent })
+    .select('id')
+    .single()
 
-  if (error) {
-    return redirect(`/clients/nouveau?error=${encodeURIComponent(error.message)}`)
+  if (error || !data) {
+    const message = error?.message ?? 'Erreur+inconnue'
+    return redirect(`/clients/nouveau?error=${encodeURIComponent(message)}`)
   }
 
   revalidatePath('/clients')
-  redirect('/clients')
+  redirect(`/clients/${data.id}`)
 }
