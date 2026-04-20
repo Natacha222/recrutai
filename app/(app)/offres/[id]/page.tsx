@@ -179,13 +179,13 @@ export default async function OffreDetailPage({
       </div>
 
       {/* Formulaire d'édition */}
-      <details className="bg-surface-alt rounded-xl border border-border-soft">
-        <summary className="px-6 py-4 font-semibold cursor-pointer select-none">
-          Modifier l&apos;offre
-        </summary>
+      <div className="bg-surface-alt rounded-xl border border-border-soft">
+        <div className="px-6 py-4 border-b border-border-soft">
+          <h2 className="font-semibold">Modifier l&apos;offre</h2>
+        </div>
         <form
           action={updateOffre}
-          className="px-6 pb-6 pt-2 space-y-4 border-t border-border-soft"
+          className="px-6 pb-6 pt-6 space-y-4"
         >
         <input type="hidden" name="id" value={offre.id} />
 
@@ -337,7 +337,7 @@ export default async function OffreDetailPage({
           </button>
         </div>
         </form>
-      </details>
+      </div>
     </div>
   )
 }
