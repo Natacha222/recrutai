@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
 
@@ -18,7 +19,7 @@ export default async function DashboardPage() {
 
   const { data: recent } = await supabase
     .from('candidatures')
-    .select('id, nom, email, score_ia, statut, created_at, offres(titre)')
+    .select('id, nom, email, score_ia, statut, created_at, offres(id, titre)')
     .order('created_at', { ascending: false })
     .limit(5)
 
@@ -77,15 +78,24 @@ export default async function DashboardPage() {
             {recent?.map((c) => {
               const offreInfo = Array.isArray(c.offres)
                 ? c.offres[0]
-                : (c.offres as { titre: string } | null)
+                : (c.offres as { id: string; titre: string } | null)
               return (
                 <tr key={c.id} className="text-sm">
                   <td className="px-6 py-4">
                     <div className="font-medium">{c.nom}</div>
                     <div className="text-muted text-xs">{c.email}</div>
                   </td>
-                  <td className="px-6 py-4 text-muted">
-                    {offreInfo?.titre ?? '—'}
+                  <td className="px-6 py-4">
+                    {offreInfo ? (
+                      <Link
+                        href={`/offres/${offreInfo.id}`}
+                        className="text-brand-purple font-medium hover:underline"
+                      >
+                        {offreInfo.titre}
+                      </Link>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <span
