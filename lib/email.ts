@@ -45,21 +45,12 @@ export async function sendQualifiedCandidateEmail({
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; color: #1F2937;">
       <h2 style="color: #7C3AED; margin-bottom: 24px;">Nouveau CV qualifié</h2>
       <p style="font-size: 16px; margin-bottom: 24px;">
-        <strong>${escapeHtml(candidateName)}</strong> vient d'atteindre le
-        seuil de qualification IA pour l'offre
-        <strong>${escapeHtml(offreTitle)}</strong>.
+        Un nouveau candidat vient d'atteindre le seuil de qualification IA
+        pour l'offre <strong>${escapeHtml(offreTitle)}</strong>.
       </p>
       <table style="border-collapse: collapse; width: 100%; margin-bottom: 24px;">
         <tr>
-          <td style="padding: 8px 0; color: #6B7280; width: 180px;">Candidat</td>
-          <td style="padding: 8px 0; font-weight: 600;">${escapeHtml(candidateName)}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 0; color: #6B7280;">Email</td>
-          <td style="padding: 8px 0;">${escapeHtml(candidateEmail)}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px 0; color: #6B7280;">Score IA</td>
+          <td style="padding: 8px 0; color: #6B7280; width: 180px;">Score IA</td>
           <td style="padding: 8px 0;">
             <span style="font-size: 20px; font-weight: 700; color: #10B981;">${score}</span>
             <span style="color: #6B7280;"> / 100 (seuil : ${seuil})</span>
