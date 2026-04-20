@@ -1,22 +1,41 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
+import CVUploader from './CVUploader'
+import { updateOffre } from './actions'
 
 type Params = Promise<{ id: string }>
+type SearchParams = Promise<{ error?: string; saved?: string }>
 
-export default async function OffreDetailPage({ params }: { params: Params }) {
+const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
+const STATUTS = ['actif', 'clos']
+
+export default async function OffreDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Params
+  searchParams: SearchParams
+}) {
   const { id } = await params
+  const { error, saved } = await searchParams
   const supabase = await createClient()
 
   const { data: offre } = await supabase
     .from('offres')
     .select(
-      'id, titre, description, lieu, statut, created_at, clients(nom, secteur)'
+      'id, titre, description, lieu, statut, contrat, seuil, client_id, clients(nom, secteur)'
     )
     .eq('id', id)
     .single()
 
   if (!offre) notFound()
+
+  const { data: clients } = await supabase
+    .from('clients')
+    .select('id, nom')
+    .order('nom')
 
   const { data: candidatures } = await supabase
     .from('candidatures')
@@ -29,7 +48,8 @@ export default async function OffreDetailPage({ params }: { params: Params }) {
   const total = candidatures?.length ?? 0
   const qualifies =
     candidatures?.filter((c) => c.statut === 'qualifié').length ?? 0
-  const rejetes = candidatures?.filter((c) => c.statut === 'rejeté').length ?? 0
+  const rejetes =
+    candidatures?.filter((c) => c.statut === 'rejeté').length ?? 0
 
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0)
 
@@ -40,14 +60,29 @@ export default async function OffreDetailPage({ params }: { params: Params }) {
   return (
     <div className="space-y-6">
       <div>
-        <div className="text-sm text-muted mb-1">
-          {clientInfo?.nom} · {offre.lieu}
+        <Link href="/offres" className="text-sm text-muted hover:underline">
+          ← Retour aux offres
+        </Link>
+        <div className="text-sm text-muted mt-2">
+          {clientInfo?.nom}
+          {offre.lieu ? ` · ${offre.lieu}` : ''}
         </div>
         <h1 className="text-2xl font-bold">{offre.titre}</h1>
       </div>
 
+      {error && (
+        <div className="px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
+          {error}
+        </div>
+      )}
+      {saved && (
+        <div className="px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
+          Modifications enregistrées.
+        </div>
+      )}
+
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Kpi label="CV reçus" value={total} />
         <Kpi
           label="CV qualifiés"
@@ -61,22 +96,20 @@ export default async function OffreDetailPage({ params }: { params: Params }) {
           sub={`${pct(rejetes)}% du total`}
           color="text-status-red"
         />
+        <Kpi
+          label="Seuil de qualification"
+          value={offre.seuil ?? 60}
+          color="text-brand-purple"
+        />
       </div>
 
-      {/* Description */}
-      <div className="bg-surface-alt rounded-xl p-6 border border-border-soft">
-        <h2 className="font-semibold mb-3">Description du poste</h2>
-        <p className="text-sm text-muted whitespace-pre-line">
-          {offre.description ?? 'Aucune description.'}
-        </p>
-      </div>
+      {/* Uploader CV */}
+      <CVUploader offreId={offre.id} />
 
       {/* Candidatures */}
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
         <div className="px-6 py-4 border-b border-border-soft">
-          <h2 className="font-semibold">
-            Candidatures reçues ({total})
-          </h2>
+          <h2 className="font-semibold">Candidatures reçues ({total})</h2>
         </div>
         <table className="w-full">
           <thead className="bg-surface">
@@ -144,6 +177,167 @@ export default async function OffreDetailPage({ params }: { params: Params }) {
           </tbody>
         </table>
       </div>
+
+      {/* Formulaire d'édition */}
+      <details className="bg-surface-alt rounded-xl border border-border-soft">
+        <summary className="px-6 py-4 font-semibold cursor-pointer select-none">
+          Modifier l&apos;offre
+        </summary>
+        <form
+          action={updateOffre}
+          className="px-6 pb-6 pt-2 space-y-4 border-t border-border-soft"
+        >
+        <input type="hidden" name="id" value={offre.id} />
+
+        <div>
+          <label
+            htmlFor="titre"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
+            Titre du poste <span className="text-status-red">*</span>
+          </label>
+          <input
+            id="titre"
+            name="titre"
+            type="text"
+            required
+            defaultValue={offre.titre}
+            className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label
+              htmlFor="client_id"
+              className="block text-sm font-medium text-brand-indigo-text mb-1"
+            >
+              Client <span className="text-status-red">*</span>
+            </label>
+            <select
+              id="client_id"
+              name="client_id"
+              required
+              defaultValue={offre.client_id ?? ''}
+              className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+            >
+              {clients?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nom}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="lieu"
+              className="block text-sm font-medium text-brand-indigo-text mb-1"
+            >
+              Lieu
+            </label>
+            <input
+              id="lieu"
+              name="lieu"
+              type="text"
+              defaultValue={offre.lieu ?? ''}
+              className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label
+              htmlFor="contrat"
+              className="block text-sm font-medium text-brand-indigo-text mb-1"
+            >
+              Contrat
+            </label>
+            <select
+              id="contrat"
+              name="contrat"
+              defaultValue={offre.contrat ?? 'CDI'}
+              className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+            >
+              {CONTRATS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="seuil"
+              className="block text-sm font-medium text-brand-indigo-text mb-1"
+            >
+              Seuil de qualification
+            </label>
+            <input
+              id="seuil"
+              name="seuil"
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              defaultValue={offre.seuil ?? 60}
+              className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="statut"
+              className="block text-sm font-medium text-brand-indigo-text mb-1"
+            >
+              Statut
+            </label>
+            <select
+              id="statut"
+              name="statut"
+              defaultValue={offre.statut ?? 'actif'}
+              className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+            >
+              {STATUTS.map((s) => (
+                <option key={s} value={s}>
+                  {s === 'actif' ? 'Active' : 'Clôturée'}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label
+            htmlFor="description"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
+            Description du poste
+          </label>
+          <textarea
+            id="description"
+            name="description"
+            rows={6}
+            defaultValue={offre.description ?? ''}
+            className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Link
+            href="/offres"
+            className="px-4 py-2 border border-border-soft rounded-md text-sm hover:bg-surface"
+          >
+            Annuler
+          </Link>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90"
+          >
+            Enregistrer les modifications
+          </button>
+        </div>
+        </form>
+      </details>
     </div>
   )
 }
@@ -162,7 +356,9 @@ function Kpi({
   return (
     <div className="bg-surface-alt rounded-xl p-5 border border-border-soft">
       <div className="text-sm text-muted font-medium">{label}</div>
-      <div className={`text-3xl font-bold mt-1 ${color ?? 'text-brand-indigo-text'}`}>
+      <div
+        className={`text-3xl font-bold mt-1 ${color ?? 'text-brand-indigo-text'}`}
+      >
         {value}
       </div>
       {sub && <div className="text-xs text-muted mt-1">{sub}</div>}

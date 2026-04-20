@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import StatusBadge from '@/components/StatusBadge'
 
 export default async function OffresPage() {
   const supabase = await createClient()
@@ -8,14 +7,26 @@ export default async function OffresPage() {
   const { data: offres } = await supabase
     .from('offres')
     .select(
-      'id, titre, lieu, statut, created_at, clients(nom), candidatures(id, statut)'
+      'id, titre, lieu, statut, contrat, seuil, created_at, clients(nom), candidatures(id, statut)'
     )
     .order('created_at', { ascending: false })
 
+  const offresActives = offres?.filter((o) => o.statut === 'actif') ?? []
+  const offresClos = offres?.filter((o) => o.statut === 'clos') ?? []
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Offres d&apos;emploi</h1>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Offres d&apos;emploi</h1>
+          <p className="text-sm text-muted mt-1">
+            {offresActives.length} offre
+            {offresActives.length > 1 ? 's' : ''} active
+            {offresActives.length > 1 ? 's' : ''} · {offresClos.length} offre
+            {offresClos.length > 1 ? 's' : ''} clôturée
+            {offresClos.length > 1 ? 's' : ''}
+          </p>
+        </div>
         <Link
           href="/offres/nouvelle"
           className="px-4 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90"
@@ -28,12 +39,12 @@ export default async function OffresPage() {
         <table className="w-full">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <th className="px-6 py-3">Titre</th>
+              <th className="px-6 py-3">Intitulé</th>
               <th className="px-6 py-3">Client</th>
-              <th className="px-6 py-3">Lieu</th>
+              <th className="px-6 py-3">Contrat</th>
               <th className="px-6 py-3">CV reçus / Qualifiés</th>
-              <th className="px-6 py-3">Statut</th>
-              <th className="px-6 py-3">Créée le</th>
+              <th className="px-6 py-3">Seuil</th>
+              <th className="px-6 py-3">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-soft">
@@ -46,25 +57,38 @@ export default async function OffresPage() {
                 ? o.clients[0]?.nom
                 : (o.clients as { nom: string } | null)?.nom
               return (
-                <tr key={o.id} className="text-sm">
-                  <td className="px-6 py-4 font-medium">
+                <tr key={o.id} className="text-sm hover:bg-surface transition align-top">
+                  <td className="px-6 py-5">
                     <Link
                       href={`/offres/${o.id}`}
-                      className="hover:text-brand-purple"
+                      className="font-semibold text-brand-indigo-text hover:text-brand-purple"
                     >
                       {o.titre}
                     </Link>
+                    {o.lieu && (
+                      <div className="text-xs text-muted mt-1 flex items-center gap-1">
+                        <span>📍</span>
+                        <span>{o.lieu}</span>
+                      </div>
+                    )}
                   </td>
-                  <td className="px-6 py-4 text-muted">{clientNom ?? '—'}</td>
-                  <td className="px-6 py-4 text-muted">{o.lieu ?? '—'}</td>
-                  <td className="px-6 py-4 font-semibold">
-                    {total} · <span className="text-status-green">{qualifies}</span>
+                  <td className="px-6 py-5 text-muted">{clientNom ?? '—'}</td>
+                  <td className="px-6 py-5 text-muted">{o.contrat ?? '—'}</td>
+                  <td className="px-6 py-5 font-semibold">
+                    {total} · {qualifies}
                   </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={o.statut ?? 'actif'} />
+                  <td className="px-6 py-5">
+                    <span className="font-bold text-brand-purple">
+                      {o.seuil}
+                    </span>
                   </td>
-                  <td className="px-6 py-4 text-muted">
-                    {new Date(o.created_at).toLocaleDateString('fr-FR')}
+                  <td className="px-6 py-5">
+                    <Link
+                      href={`/offres/${o.id}`}
+                      className="text-brand-purple text-sm font-medium hover:underline"
+                    >
+                      Voir →
+                    </Link>
                   </td>
                 </tr>
               )
