@@ -85,7 +85,7 @@ export default async function LoginPage({
                 </label>
                 <Link
                   href="/mot-de-passe-oublie"
-                  className="text-xs text-brand-purple hover:underline"
+                  className="text-sm text-brand-purple hover:underline"
                 >
                   Mot de passe oublié&nbsp;?
                 </Link>

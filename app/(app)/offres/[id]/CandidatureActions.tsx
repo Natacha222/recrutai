@@ -57,17 +57,19 @@ export default function CandidatureActions({
           type="button"
           onClick={handleQualify}
           disabled={isPending}
-          className="px-3 py-1.5 rounded-md bg-status-green text-white text-xs font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+          aria-label="Qualifier le candidat"
+          className="px-3 py-2 rounded-md bg-status-green text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          ✓ Qualifier
+          <span aria-hidden="true">✓</span> Qualifier
         </button>
         <button
           type="button"
           onClick={handleReject}
           disabled={isPending}
-          className="px-3 py-1.5 rounded-md bg-status-red text-white text-xs font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+          aria-label="Rejeter le candidat"
+          className="px-3 py-2 rounded-md bg-status-red text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          ✗ Rejeter
+          <span aria-hidden="true">✗</span> Rejeter
         </button>
       </div>
       {isPending && (

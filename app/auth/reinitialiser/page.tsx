@@ -90,7 +90,7 @@ export default async function ReinitialiserPage({
                     autoComplete="new-password"
                     className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
                   />
-                  <p className="text-xs text-muted mt-1">
+                  <p className="text-sm text-muted mt-1">
                     8 caractères minimum.
                   </p>
                 </div>

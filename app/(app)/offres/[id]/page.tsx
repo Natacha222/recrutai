@@ -165,7 +165,7 @@ export default async function OffreDetailPage({
           <StatusBadge status={effectiveOffreStatut} />
           <Link
             href={`/offres/${offre.id}/modifier`}
-            className="ml-auto px-3 py-1.5 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90"
+            className="ml-auto px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90"
           >
             Modifier l&apos;offre
           </Link>
@@ -288,7 +288,7 @@ export default async function OffreDetailPage({
               <tr key={c.id} className="text-sm align-top">
                 <td className="px-6 py-4">
                   <div className="font-medium">{c.nom}</div>
-                  <div className="text-muted text-xs">{c.email}</div>
+                  <div className="text-muted text-sm">{c.email}</div>
                 </td>
                 <td className="px-6 py-4">
                   <span
@@ -303,7 +303,7 @@ export default async function OffreDetailPage({
                     {c.score_ia ?? '—'}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-muted text-xs max-w-md">
+                <td className="px-6 py-4 text-muted text-sm max-w-md">
                   {c.justification_ia}
                 </td>
                 <td className="px-6 py-4">
@@ -319,12 +319,12 @@ export default async function OffreDetailPage({
                         href={c.cv_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-brand-purple text-brand-purple text-xs font-semibold hover:bg-brand-purple hover:text-white transition-colors w-fit"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-brand-purple text-brand-purple text-sm font-semibold hover:bg-brand-purple hover:text-white transition-colors w-fit"
                       >
-                        📄 Voir le CV
+                        <span aria-hidden="true">📄</span> Voir le CV
                       </a>
                     ) : (
-                      <span className="text-muted text-xs">—</span>
+                      <span className="text-muted text-sm">—</span>
                     )}
                     {c.statut === 'en attente' && (
                       <CandidatureActions candidatureId={c.id} />

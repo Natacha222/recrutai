@@ -33,7 +33,7 @@ export default function DeleteAllCandidaturesButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs px-3 py-1.5 rounded-md border border-status-red text-status-red hover:bg-status-red hover:text-white transition-colors font-semibold"
+        className="text-sm px-3 py-2 rounded-md border border-status-red text-status-red hover:bg-status-red hover:text-white transition-colors font-semibold"
       >
         Effacer toutes les candidatures
       </button>

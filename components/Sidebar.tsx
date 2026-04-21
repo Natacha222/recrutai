@@ -39,7 +39,7 @@ export default function Sidebar() {
       <form action="/auth/logout" method="post" className="p-4 shrink-0 border-t border-white/10">
         <button
           type="submit"
-          className="w-full text-left text-xs text-brand-indigo-light/70 hover:text-white"
+          className="w-full text-left text-sm text-brand-indigo-light hover:text-white"
         >
           Se déconnecter
         </button>
