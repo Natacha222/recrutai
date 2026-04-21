@@ -1,18 +1,19 @@
 import Link from 'next/link'
-import { login } from './actions'
+import { requestPasswordReset } from './actions'
 
-type SearchParams = Promise<{ error?: string; reset_sent?: string }>
+type SearchParams = Promise<{ error?: string }>
 
-export default async function LoginPage({
+export default async function MotDePasseOubliePage({
   searchParams,
 }: {
   searchParams: SearchParams
 }) {
-  const { error, reset_sent } = await searchParams
+  const { error } = await searchParams
 
   return (
     <div className="min-h-screen flex">
-      {/* Panneau gauche décoratif */}
+      {/* Panneau gauche décoratif (identique au login pour garder le même
+          univers visuel entre les deux écrans d'authentification) */}
       <div
         className="hidden lg:flex lg:w-1/2 bg-brand-indigo items-end p-12 relative overflow-hidden"
         style={{
@@ -27,10 +28,6 @@ export default async function LoginPage({
           <p className="text-lg">
             L&apos;intelligence artificielle au service de vos recrutements.
           </p>
-          <p className="mt-6 text-sm opacity-90">
-            Identifiez en quelques secondes les candidats les plus qualifiés
-            pour chaque offre d&apos;emploi.
-          </p>
         </div>
       </div>
 
@@ -38,10 +35,11 @@ export default async function LoginPage({
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
           <h2 className="text-2xl font-bold text-brand-indigo-text mb-2">
-            Connexion
+            Mot de passe oublié
           </h2>
           <p className="text-sm text-muted mb-8">
-            Accédez à votre espace RecrutAI
+            Saisis ton adresse email, nous t&apos;enverrons un lien pour
+            définir un nouveau mot de passe.
           </p>
 
           {error && (
@@ -49,15 +47,8 @@ export default async function LoginPage({
               {error}
             </div>
           )}
-          {reset_sent && (
-            <div className="mb-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
-              Si un compte existe pour cette adresse, un email de
-              réinitialisation vient d&apos;être envoyé. Vérifie ta boîte de
-              réception.
-            </div>
-          )}
 
-          <form action={login} className="space-y-4">
+          <form action={requestPasswordReset} className="space-y-4">
             <div>
               <label
                 htmlFor="email"
@@ -75,38 +66,22 @@ export default async function LoginPage({
               />
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-brand-indigo-text"
-                >
-                  Mot de passe
-                </label>
-                <Link
-                  href="/mot-de-passe-oublie"
-                  className="text-xs text-brand-purple hover:underline"
-                >
-                  Mot de passe oublié&nbsp;?
-                </Link>
-              </div>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
-              />
-            </div>
-
             <button
               type="submit"
               className="w-full py-2.5 bg-brand-purple text-white font-semibold rounded-md hover:opacity-90 transition"
             >
-              Se connecter
+              Envoyer le lien
             </button>
           </form>
+
+          <div className="mt-6 text-center">
+            <Link
+              href="/login"
+              className="text-sm text-muted hover:text-brand-purple hover:underline"
+            >
+              ← Retour à la connexion
+            </Link>
+          </div>
         </div>
       </div>
     </div>

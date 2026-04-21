@@ -31,15 +31,29 @@ export async function updateSession(request: NextRequest) {
 
   const url = request.nextUrl.clone()
 
-  // Pages publiques
-  const isPublic = url.pathname === '/login' || url.pathname.startsWith('/auth')
+  // Pages publiques (accessibles sans être connecté) :
+  //   - /login : formulaire de connexion
+  //   - /mot-de-passe-oublie : demande de lien de réinitialisation
+  //   - /auth/* : callback OAuth/recovery, logout, reset du mot de passe
+  const isPublic =
+    url.pathname === '/login' ||
+    url.pathname === '/mot-de-passe-oublie' ||
+    url.pathname.startsWith('/auth')
 
   if (!user && !isPublic) {
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  if (user && url.pathname === '/login') {
+  // Un utilisateur déjà connecté n'a rien à faire sur les écrans
+  // d'identification : on le renvoie au dashboard. En revanche on ne
+  // redirige PAS depuis /auth/reinitialiser : après le callback PKCE de
+  // Supabase, l'utilisateur y accède avec une session active et doit
+  // pouvoir y saisir son nouveau mot de passe.
+  if (
+    user &&
+    (url.pathname === '/login' || url.pathname === '/mot-de-passe-oublie')
+  ) {
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
