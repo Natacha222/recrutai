@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
 import { effectiveStatut, formatValidite } from '@/lib/format'
 import {
+  DateFilter,
   FiltersReset,
   SelectFilter,
   TextFilter,
@@ -11,6 +12,7 @@ import {
 type SortKey =
   | 'titre'
   | 'client'
+  | 'referent'
   | 'contrat'
   | 'statut'
   | 'date_validite'
@@ -21,6 +23,7 @@ type SortDir = 'asc' | 'desc'
 const SORT_KEYS: SortKey[] = [
   'titre',
   'client',
+  'referent',
   'contrat',
   'statut',
   'date_validite',
@@ -35,7 +38,15 @@ const STATUTS: { value: string; label: string }[] = [
   { value: 'clos', label: 'Clôturée' },
 ]
 
-const FILTER_FIELDS = ['q', 'client', 'contrat', 'statut']
+const FILTER_FIELDS = [
+  'q',
+  'client',
+  'referent',
+  'contrat',
+  'statut',
+  'validite',
+]
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function SortableHeader({
   label,
@@ -77,8 +88,11 @@ function SortableHeader({
 type SearchParams = Promise<{
   q?: string
   client?: string
+  referent?: string
   contrat?: string
   statut?: string
+  /** YYYY-MM-DD — filtre date_validite >= validite si défini et valide. */
+  validite?: string
   sort?: string
   dir?: string
 }>
@@ -92,19 +106,26 @@ export default async function OffresPage({
   const {
     q = '',
     client = '',
+    referent = '',
     contrat = '',
     statut = '',
+    validite = '',
   } = params
   const sort: SortKey = SORT_KEYS.includes(params.sort as SortKey)
     ? (params.sort as SortKey)
     : 'titre'
   const dir: SortDir = params.dir === 'desc' ? 'desc' : 'asc'
 
+  // On ignore silencieusement une date mal formée pour éviter de casser
+  // la requête sur un paramètre corrompu — l'input type=date du navigateur
+  // garantit déjà le format ISO en usage normal.
+  const validiteEffective = ISO_DATE_RE.test(validite) ? validite : ''
+
   const supabase = await createClient()
   const { data: offres } = await supabase
     .from('offres')
     .select(
-      'id, titre, lieu, statut, contrat, seuil, created_at, date_validite, clients(nom), candidatures(id, statut)'
+      'id, titre, lieu, statut, contrat, seuil, created_at, date_validite, am_referent, clients(nom), candidatures(id, statut)'
     )
 
   const allOffres = (offres ?? []).map((o) => {
@@ -134,13 +155,31 @@ export default async function OffresPage({
     )
   ).sort((a, b) => a.localeCompare(b, 'fr'))
 
+  // Distinct référents pour le filtre (offres uniquement — si on a besoin
+  // d'autres référents, les filtres ne les matcheront pas de toute façon).
+  const referentsList = Array.from(
+    new Set(
+      allOffres
+        .map((o) => o.am_referent)
+        .filter((r): r is string => !!r && r.trim() !== '')
+    )
+  ).sort((a, b) => a.localeCompare(b, 'fr'))
+
   // Filter
   const qLower = q.trim().toLowerCase()
   const filtered = allOffres.filter((o) => {
     if (qLower && !(o.titre ?? '').toLowerCase().includes(qLower)) return false
     if (client && o.clientNom !== client) return false
+    if (referent && o.am_referent !== referent) return false
     if (contrat && o.contrat !== contrat) return false
     if (statut && o.effective !== statut) return false
+    // Comparaison lexicographique sur ISO YYYY-MM-DD = chronologique.
+    // Sémantique « encore valide à cette date » : on garde les offres dont
+    // la date de validité est >= la date choisie. Les offres sans date sont
+    // exclues dès que le filtre est défini.
+    if (validiteEffective) {
+      if (!o.date_validite || o.date_validite < validiteEffective) return false
+    }
     return true
   })
 
@@ -152,6 +191,10 @@ export default async function OffresPage({
       case 'client':
         av = (a.clientNom ?? '').toLowerCase()
         bv = (b.clientNom ?? '').toLowerCase()
+        break
+      case 'referent':
+        av = (a.am_referent ?? '').toLowerCase()
+        bv = (b.am_referent ?? '').toLowerCase()
         break
       case 'contrat':
         av = (a.contrat ?? '').toLowerCase()
@@ -190,7 +233,14 @@ export default async function OffresPage({
   const totalAll = allOffres.length
   const offresActives = allOffres.filter((o) => o.effective === 'actif').length
   const offresClos = allOffres.filter((o) => o.effective === 'clos').length
-  const hasFilter = !!(q || client || contrat || statut)
+  const hasFilter = !!(
+    q ||
+    client ||
+    referent ||
+    contrat ||
+    statut ||
+    validiteEffective
+  )
   const totalShown = sorted.length
   const subtitle = hasFilter
     ? `${totalShown} résultat${totalShown > 1 ? 's' : ''} sur ${totalAll}`
@@ -205,8 +255,10 @@ export default async function OffresPage({
     const sp = new URLSearchParams()
     if (q) sp.set('q', q)
     if (client) sp.set('client', client)
+    if (referent) sp.set('referent', referent)
     if (contrat) sp.set('contrat', contrat)
     if (statut) sp.set('statut', statut)
+    if (validiteEffective) sp.set('validite', validiteEffective)
     if (key !== 'titre') sp.set('sort', key)
     if (newDir !== 'asc') sp.set('dir', newDir)
     const qs = sp.toString()
@@ -248,6 +300,13 @@ export default async function OffresPage({
                 sort={sort}
                 dir={dir}
                 href={sortHref('client')}
+              />
+              <SortableHeader
+                label="Référent"
+                sortKey="referent"
+                sort={sort}
+                dir={dir}
+                href={sortHref('referent')}
               />
               <SortableHeader
                 label="Contrat"
@@ -299,6 +358,13 @@ export default async function OffresPage({
               </th>
               <th className="px-6 pt-0 pb-3 font-normal normal-case">
                 <SelectFilter
+                  field="referent"
+                  options={referentsList}
+                  placeholder="Tous"
+                />
+              </th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <SelectFilter
                   field="contrat"
                   options={CONTRATS}
                   placeholder="Tous"
@@ -314,7 +380,9 @@ export default async function OffresPage({
                   placeholder="Tous"
                 />
               </th>
-              <th className="px-6 pt-0 pb-3"></th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <DateFilter field="validite" />
+              </th>
               <th className="px-6 pt-0 pb-3"></th>
               <th className="px-6 pt-0 pb-3"></th>
               <th className="px-6 pt-0 pb-3"></th>
@@ -341,6 +409,9 @@ export default async function OffresPage({
                   )}
                 </td>
                 <td className="px-6 py-5 text-muted">{o.clientNom ?? '—'}</td>
+                <td className="px-6 py-5 text-muted">
+                  {o.am_referent ?? '—'}
+                </td>
                 <td className="px-6 py-5 text-muted">{o.contrat ?? '—'}</td>
                 <td className="px-6 py-5">
                   <StatusBadge status={o.effective} />
@@ -369,7 +440,7 @@ export default async function OffresPage({
             {sorted.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-6 py-8 text-center text-muted text-sm"
                 >
                   {hasFilter

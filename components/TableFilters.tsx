@@ -67,6 +67,30 @@ export function TextFilter({
   )
 }
 
+/**
+ * Champ de filtre date (type=date). Comme SelectFilter, pas de debouncing :
+ * l'utilisateur ouvre le picker et choisit, un clic = un update URL.
+ */
+export function DateFilter({
+  field,
+  placeholder,
+}: {
+  field: string
+  /** Placeholder affiché quand aucun champ date natif n'est disponible. */
+  placeholder?: string
+}) {
+  const { urlValue, update } = useUrlFilter(field)
+  return (
+    <input
+      type="date"
+      value={urlValue}
+      onChange={(e) => update(e.target.value)}
+      placeholder={placeholder}
+      className={CELL_INPUT_CLASS}
+    />
+  )
+}
+
 export function SelectFilter({
   field,
   placeholder,
