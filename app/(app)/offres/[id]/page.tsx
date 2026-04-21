@@ -2,18 +2,10 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
-import {
-  formatValidite,
-  effectiveStatut,
-  isExpired,
-  referentFromEmail,
-  todayIso,
-} from '@/lib/format'
-import { getAvailableReferents } from '@/lib/referents'
+import { formatValidite, effectiveStatut, isExpired } from '@/lib/format'
 import CVUploader from './CVUploader'
 import CandidatureActions from './CandidatureActions'
 import DeleteAllCandidaturesButton from './DeleteAllCandidaturesButton'
-import EditOffreForm from './EditOffreForm'
 
 type CandidatureFilter = 'qualifié' | 'en attente' | 'rejeté'
 const FILTERS: CandidatureFilter[] = ['qualifié', 'en attente', 'rejeté']
@@ -44,23 +36,12 @@ export default async function OffreDetailPage({
   const { data: offre } = await supabase
     .from('offres')
     .select(
-      'id, titre, description, lieu, statut, contrat, seuil, date_validite, client_id, am_referent, clients(nom, secteur)'
+      'id, titre, lieu, statut, seuil, date_validite, am_referent, clients(nom, secteur)'
     )
     .eq('id', id)
     .single()
 
   if (!offre) notFound()
-
-  // Liste des clients + utilisateur connecté + référents existants
-  // (union clients.am_referent ∪ offres.am_referent) pour alimenter le select
-  // référent. Le référent courant de l'offre est toujours inclus dans la liste
-  // même s'il n'est plus utilisé ailleurs.
-  const [{ data: clients }, userRes, availableReferents] = await Promise.all([
-    supabase.from('clients').select('id, nom').order('nom'),
-    supabase.auth.getUser(),
-    getAvailableReferents(supabase, [offre.am_referent]),
-  ])
-  const defaultReferent = referentFromEmail(userRes.data.user?.email)
 
   const { data: candidatures } = await supabase
     .from('candidatures')
@@ -94,7 +75,6 @@ export default async function OffreDetailPage({
   const effectiveOffreStatut = effectiveStatut(offre.statut, offre.date_validite)
   const autoClosed =
     offre.statut !== 'clos' && isExpired(offre.date_validite)
-  const today = todayIso()
 
   return (
     <div className="space-y-6">
@@ -113,6 +93,12 @@ export default async function OffreDetailPage({
         <div className="flex items-center gap-3 flex-wrap mt-1">
           <h1 className="text-2xl font-bold">{offre.titre}</h1>
           <StatusBadge status={effectiveOffreStatut} />
+          <Link
+            href={`/offres/${offre.id}/modifier`}
+            className="ml-auto px-3 py-1.5 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90"
+          >
+            Modifier l&apos;offre
+          </Link>
         </div>
       </div>
 
@@ -129,8 +115,8 @@ export default async function OffreDetailPage({
       {effectiveOffreStatut === 'clos' && (
         <div className="px-3 py-2 rounded-md bg-status-amber-bg text-status-amber text-sm">
           {autoClosed
-            ? 'Offre clôturée automatiquement : la date de validité est dépassée. Modifie-la ci-dessous pour la réactiver.'
-            : "Offre clôturée. Pour la réactiver, mets une date de validité dans le futur ci-dessous."}
+            ? "Offre clôturée automatiquement : la date de validité est dépassée. Clique sur « Modifier l'offre » pour la réactiver."
+            : "Offre clôturée. Pour la réactiver, clique sur « Modifier l'offre » et mets une date de validité dans le futur."}
         </div>
       )}
 
@@ -273,30 +259,6 @@ export default async function OffreDetailPage({
             )}
           </tbody>
         </table>
-      </div>
-
-      {/* Formulaire d'édition */}
-      <div className="bg-surface-alt rounded-xl border border-border-soft">
-        <div className="px-6 py-4 border-b border-border-soft">
-          <h2 className="font-semibold">Modifier l&apos;offre</h2>
-        </div>
-        <EditOffreForm
-          offre={{
-            id: offre.id,
-            titre: offre.titre,
-            description: offre.description,
-            lieu: offre.lieu,
-            contrat: offre.contrat,
-            seuil: offre.seuil,
-            date_validite: offre.date_validite,
-            client_id: offre.client_id,
-            am_referent: offre.am_referent,
-          }}
-          clients={clients ?? []}
-          today={today}
-          defaultReferent={defaultReferent}
-          availableReferents={availableReferents}
-        />
       </div>
     </div>
   )

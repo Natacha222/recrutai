@@ -33,7 +33,7 @@ export async function updateOffre(formData: FormData) {
   if (!id) return redirect('/offres?error=Offre+introuvable')
   if (!titre || !client_id) {
     return redirect(
-      `/offres/${id}?error=Le+titre+et+le+client+sont+obligatoires`
+      `/offres/${id}/modifier?error=Le+titre+et+le+client+sont+obligatoires`
     )
   }
   if (
@@ -43,18 +43,18 @@ export async function updateOffre(formData: FormData) {
     !Number.isInteger(seuilRaw)
   ) {
     return redirect(
-      `/offres/${id}?error=Le+seuil+doit+%C3%AAtre+un+entier+compris+entre+50+et+100`
+      `/offres/${id}/modifier?error=Le+seuil+doit+%C3%AAtre+un+entier+compris+entre+50+et+100`
     )
   }
   const seuil = seuilRaw
   if (!date_validite) {
     return redirect(
-      `/offres/${id}?error=La+date+de+validit%C3%A9+est+obligatoire`
+      `/offres/${id}/modifier?error=La+date+de+validit%C3%A9+est+obligatoire`
     )
   }
   if (date_validite < todayIso()) {
     return redirect(
-      `/offres/${id}?error=La+date+de+validit%C3%A9+doit+%C3%AAtre+post%C3%A9rieure+ou+%C3%A9gale+%C3%A0+aujourd%27hui`
+      `/offres/${id}/modifier?error=La+date+de+validit%C3%A9+doit+%C3%AAtre+post%C3%A9rieure+ou+%C3%A9gale+%C3%A0+aujourd%27hui`
     )
   }
 
@@ -79,7 +79,9 @@ export async function updateOffre(formData: FormData) {
     .eq('id', id)
 
   if (error) {
-    return redirect(`/offres/${id}?error=${encodeURIComponent(error.message)}`)
+    return redirect(
+      `/offres/${id}/modifier?error=${encodeURIComponent(error.message)}`
+    )
   }
 
   revalidatePath('/offres')
