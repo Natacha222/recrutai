@@ -38,12 +38,12 @@ export async function createOffre(formData: FormData) {
   }
   if (
     !Number.isFinite(seuilRaw) ||
-    seuilRaw < 0 ||
+    seuilRaw < 50 ||
     seuilRaw > 100 ||
     !Number.isInteger(seuilRaw)
   ) {
     return redirect(
-      '/offres/nouvelle?error=Le+seuil+doit+%C3%AAtre+un+entier+compris+entre+0+et+100'
+      '/offres/nouvelle?error=Le+seuil+doit+%C3%AAtre+un+entier+compris+entre+50+et+100'
     )
   }
   const seuil = seuilRaw

@@ -53,14 +53,14 @@ export default function EditOffreForm({
     offre.am_referent ?? defaultReferent ?? ''
   )
 
-  // Validation seuil : entier dans [0, 100]. On garde la valeur en `string`
+  // Validation seuil : entier dans [50, 100]. On garde la valeur en `string`
   // plutôt qu'en `number` pour pouvoir distinguer « champ vide » de « 0 ».
   const seuilNum = Number(seuilStr)
   const seuilIsValid =
     seuilStr.trim() !== '' &&
     Number.isFinite(seuilNum) &&
     Number.isInteger(seuilNum) &&
-    seuilNum >= 0 &&
+    seuilNum >= 50 &&
     seuilNum <= 100
 
   // Validation date : format ISO + postérieure ou égale à aujourd'hui.
@@ -195,7 +195,7 @@ export default function EditOffreForm({
             id="seuil"
             name="seuil"
             type="number"
-            min={0}
+            min={50}
             max={100}
             step={1}
             required
@@ -211,11 +211,11 @@ export default function EditOffreForm({
           />
           {!seuilIsValid ? (
             <p id="seuil_error" className="text-xs text-status-red mt-1">
-              Le seuil doit être un entier compris entre 0 et 100.
+              Le seuil doit être un entier compris entre 50 et 100.
             </p>
           ) : (
             <p className="text-xs text-muted mt-1">
-              Entier compris entre 0 et 100.
+              Entier compris entre 50 et 100.
             </p>
           )}
         </div>

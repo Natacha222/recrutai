@@ -138,7 +138,7 @@ export default function OffreForm({
   const seuilIsValid =
     Number.isFinite(seuil) &&
     Number.isInteger(seuil) &&
-    seuil >= 0 &&
+    seuil >= 50 &&
     seuil <= 100
 
   const allFieldsFilled =
@@ -338,7 +338,7 @@ export default function OffreForm({
               id="seuil"
               name="seuil"
               type="number"
-              min={0}
+              min={50}
               max={100}
               step={1}
               required
@@ -354,7 +354,7 @@ export default function OffreForm({
             />
             {!seuilIsValid && (
               <p id="seuil_error" className="text-xs text-status-red mt-1">
-                Le seuil doit être un entier compris entre 0 et 100.
+                Le seuil doit être un entier compris entre 50 et 100.
               </p>
             )}
           </div>
