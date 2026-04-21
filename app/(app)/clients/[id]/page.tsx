@@ -150,14 +150,12 @@ export default async function ClientDetailPage({
               </Link>
               <div className="flex items-center gap-3 text-muted text-xs">
                 <span>{o.lieu ?? '—'}</span>
-                <span>
-                  {o.date_validite
-                    ? `Valide jusqu'au ${formatValidite(o.date_validite)}`
-                    : '—'}
-                </span>
                 <StatusBadge
                   status={effectiveStatut(o.statut, o.date_validite)}
                 />
+                <span>
+                  {o.date_validite ? formatValidite(o.date_validite) : '—'}
+                </span>
               </div>
             </li>
           ))}
