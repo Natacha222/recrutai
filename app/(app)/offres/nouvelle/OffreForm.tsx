@@ -108,14 +108,24 @@ export default function OffreForm({
     setShowClientModal(false)
   }
 
-  // Validation de la date : un message explicite s'affiche sous le champ
-  // si elle est dans le passé, pour que l'utilisateur comprenne pourquoi
-  // le bouton de sauvegarde est désactivé.
+  // Validation de la date. Un fallback local au navigateur sert de
+  // filet si le `today` envoyé par le serveur est vide (ex. souci ICU
+  // sur Vercel) — dans ce cas on ne peut pas compter dessus pour la
+  // comparaison.
+  const clientToday = (() => {
+    const d = new Date()
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  })()
+  const effectiveToday = /^\d{4}-\d{2}-\d{2}$/.test(today)
+    ? today
+    : clientToday
+
   const dateFormatIsValid = /^\d{4}-\d{2}-\d{2}$/.test(dateValidite)
-  const dateInPast = dateFormatIsValid && dateValidite < today
-  const todayDisplay = today
-    ? `${today.slice(8, 10)}/${today.slice(5, 7)}/${today.slice(0, 4)}`
-    : ''
+  const dateInPast = dateFormatIsValid && dateValidite < effectiveToday
+  const todayDisplay = `${effectiveToday.slice(8, 10)}/${effectiveToday.slice(5, 7)}/${effectiveToday.slice(0, 4)}`
 
   const allFieldsFilled =
     titre.trim() !== '' &&
@@ -128,14 +138,8 @@ export default function OffreForm({
 
   return (
     <>
-      {/* En-tête : hint + bouton d'import PDF compact */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
-        <p className="text-sm text-muted max-w-xl">
-          Remplis les champs à la main, ou importe un PDF d&apos;offre
-          d&apos;emploi pour que l&apos;IA les pré-remplisse — tu peux ajuster
-          chaque champ après l&apos;import.
-        </p>
-
+      {/* En-tête : bouton d'import PDF compact */}
+      <div className="flex items-start justify-end gap-4 flex-wrap mb-4">
         <label
           className={`inline-flex items-center gap-2 px-4 py-2 border-2 border-brand-purple text-brand-purple rounded-md text-sm font-semibold whitespace-nowrap ${
             importStatus === 'importing'
@@ -309,7 +313,7 @@ export default function OffreForm({
               name="date_validite"
               type="date"
               required
-              min={today}
+              min={effectiveToday}
               value={dateValidite}
               onChange={(e) => setDateValidite(e.target.value)}
               aria-invalid={dateInPast}
