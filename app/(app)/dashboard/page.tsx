@@ -10,12 +10,10 @@ export const dynamic = 'force-dynamic'
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  const [{ count: nbClients }, { count: nbOffres }, { count: nbCandidatures }] =
-    await Promise.all([
-      supabase.from('clients').select('*', { count: 'exact', head: true }),
-      supabase.from('offres').select('*', { count: 'exact', head: true }),
-      supabase.from('candidatures').select('*', { count: 'exact', head: true }),
-    ])
+  const [{ count: nbOffres }, { count: nbCandidatures }] = await Promise.all([
+    supabase.from('offres').select('*', { count: 'exact', head: true }),
+    supabase.from('candidatures').select('*', { count: 'exact', head: true }),
+  ])
 
   const { count: nbQualifies } = await supabase
     .from('candidatures')
@@ -208,7 +206,6 @@ export default async function DashboardPage() {
   const totalStatut = statutBreakdown.reduce((s, x) => s + x.count, 0)
 
   const kpis = [
-    { label: 'Clients', value: nbClients ?? 0 },
     { label: 'Offres actives', value: nbOffres ?? 0 },
     { label: 'Candidatures reçues', value: nbCandidatures ?? 0 },
     { label: 'Candidats qualifiés', value: nbQualifies ?? 0 },
@@ -226,7 +223,7 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Dashboard</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {kpis.map((k) => (
           <div
             key={k.label}
