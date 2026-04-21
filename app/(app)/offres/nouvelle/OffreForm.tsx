@@ -18,10 +18,14 @@ export default function OffreForm({
   clients: initialClients,
   initialClientId,
   today,
+  defaultReferent,
+  availableReferents,
 }: {
   clients: Client[]
   initialClientId: string
   today: string
+  defaultReferent: string | null
+  availableReferents: string[]
 }) {
   const [clients, setClients] = useState<Client[]>(initialClients)
 
@@ -127,12 +131,18 @@ export default function OffreForm({
   const dateInPast = dateFormatIsValid && dateValidite < effectiveToday
   const todayDisplay = `${effectiveToday.slice(8, 10)}/${effectiveToday.slice(5, 7)}/${effectiveToday.slice(0, 4)}`
 
+  const seuilIsValid =
+    Number.isFinite(seuil) &&
+    Number.isInteger(seuil) &&
+    seuil >= 0 &&
+    seuil <= 100
+
   const allFieldsFilled =
     titre.trim() !== '' &&
     clientId !== '' &&
     lieu.trim() !== '' &&
     description.trim() !== '' &&
-    Number.isFinite(seuil) &&
+    seuilIsValid &&
     dateFormatIsValid &&
     !dateInPast
 
@@ -222,21 +232,30 @@ export default function OffreForm({
               </button>
             </div>
           ) : (
-            <select
-              id="client_id"
-              name="client_id"
-              required
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
-            >
-              <option value="">— Sélectionnez un client —</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nom}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                id="client_id"
+                name="client_id"
+                required
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                className="flex-1 px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+              >
+                <option value="">— Sélectionnez un client —</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nom}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowClientModal(true)}
+                className="px-3 py-2 border-2 border-brand-purple text-brand-purple rounded-md text-sm font-semibold whitespace-nowrap hover:bg-brand-purple hover:text-white"
+              >
+                + Nouveau client
+              </button>
+            </div>
           )}
         </div>
 
@@ -298,8 +317,19 @@ export default function OffreForm({
               required
               value={seuil}
               onChange={(e) => setSeuil(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
+              aria-invalid={!seuilIsValid}
+              aria-describedby={!seuilIsValid ? 'seuil_error' : undefined}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                !seuilIsValid
+                  ? 'border-status-red focus:ring-status-red'
+                  : 'border-border-soft focus:ring-brand-purple'
+              }`}
             />
+            {!seuilIsValid && (
+              <p id="seuil_error" className="text-xs text-status-red mt-1">
+                Le seuil doit être un entier compris entre 0 et 100.
+              </p>
+            )}
           </div>
           <div>
             <label
@@ -378,6 +408,8 @@ export default function OffreForm({
       {showClientModal && (
         <CreateClientModal
           initialName={missingClientName ?? ''}
+          defaultReferent={defaultReferent}
+          availableReferents={availableReferents}
           onCreated={handleClientCreated}
           onClose={() => setShowClientModal(false)}
         />
@@ -394,10 +426,14 @@ const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
 
 function CreateClientModal({
   initialName,
+  defaultReferent,
+  availableReferents,
   onCreated,
   onClose,
 }: {
   initialName: string
+  defaultReferent: string | null
+  availableReferents: string[]
   onCreated: (c: Client) => void
   onClose: () => void
 }) {
@@ -405,7 +441,7 @@ function CreateClientModal({
   const [secteur, setSecteur] = useState('')
   const [email, setEmail] = useState('')
   const [formule, setFormule] = useState<string>('Abonnement')
-  const [amReferent, setAmReferent] = useState('')
+  const [amReferent, setAmReferent] = useState(defaultReferent ?? '')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -502,13 +538,18 @@ function CreateClientModal({
           <label className="block text-sm font-medium text-brand-indigo-text mb-1">
             Référent
           </label>
-          <input
-            type="text"
+          <select
             value={amReferent}
             onChange={(e) => setAmReferent(e.target.value)}
-            placeholder="N. MAGNE (1re lettre du prénom, puis nom)"
-            className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
-          />
+            className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+          >
+            <option value="">— Sans référent —</option>
+            {availableReferents.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
         </div>
 
         {error && (

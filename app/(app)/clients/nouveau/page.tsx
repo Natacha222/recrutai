@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server'
+import { referentFromEmail } from '@/lib/format'
 import { createClientAction } from './actions'
 
 type SearchParams = Promise<{ error?: string }>
@@ -11,6 +13,25 @@ export default async function NouveauClientPage({
   searchParams: SearchParams
 }) {
   const { error } = await searchParams
+
+  // User connecté + liste des référents distincts déjà en base.
+  // L'user courant est toujours ajouté à la liste pour qu'il puisse se
+  // sélectionner même s'il n'a encore aucun client.
+  const supabase = await createClient()
+  const [userRes, referentsRes] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from('clients').select('am_referent'),
+  ])
+  const defaultReferent = referentFromEmail(userRes.data.user?.email)
+  const referentsSet = new Set<string>(
+    (referentsRes.data ?? [])
+      .map((r) => r.am_referent)
+      .filter((r): r is string => !!r && r.trim() !== '')
+  )
+  if (defaultReferent) referentsSet.add(defaultReferent)
+  const availableReferents = Array.from(referentsSet).sort((a, b) =>
+    a.localeCompare(b, 'fr')
+  )
 
   return (
     <div className="max-w-2xl">
@@ -51,11 +72,27 @@ export default async function NouveauClientPage({
           </select>
         </div>
 
-        <Field
-          label="Référent"
-          name="am_referent"
-          placeholder="N. MAGNE (1re lettre du prénom, puis nom)"
-        />
+        <div>
+          <label
+            htmlFor="am_referent"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
+            Référent
+          </label>
+          <select
+            id="am_referent"
+            name="am_referent"
+            defaultValue={defaultReferent ?? ''}
+            className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+          >
+            <option value="">— Sans référent —</option>
+            {availableReferents.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="flex justify-end gap-3 pt-2">
           <Link

@@ -80,3 +80,24 @@ export function formatReferent(
   const lastName = parts.slice(1).join(' ').toUpperCase()
   return `${firstLetter}. ${lastName}`
 }
+
+/**
+ * Déduit un référent au format canonique « F. NOM » depuis un email.
+ * Règle : on prend la partie locale de l'email, on transforme les
+ * séparateurs (. _ -) en espaces, puis on délègue à formatReferent.
+ *
+ * Exemples :
+ *   referentFromEmail('n.magne@agoriade.fr')     -> 'N. MAGNE'
+ *   referentFromEmail('jean.dupont@recrutai.fr') -> 'J. DUPONT'
+ *   referentFromEmail('contact@x.fr')            -> 'CONTACT'
+ *   referentFromEmail('')                        -> null
+ */
+export function referentFromEmail(
+  email: string | null | undefined
+): string | null {
+  if (!email) return null
+  const local = email.split('@')[0] ?? ''
+  if (!local) return null
+  const withSpaces = local.replace(/[._-]+/g, ' ')
+  return formatReferent(withSpaces)
+}

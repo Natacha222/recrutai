@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { todayIso } from '@/lib/format'
+import { referentFromEmail, todayIso } from '@/lib/format'
 import OffreForm from './OffreForm'
 
 type SearchParams = Promise<{ error?: string; client_id?: string }>
@@ -11,10 +11,31 @@ export default async function NouvelleOffrePage({
 }) {
   const { error, client_id } = await searchParams
   const supabase = await createClient()
-  const { data: clients } = await supabase
-    .from('clients')
-    .select('id, nom')
-    .order('nom')
+
+  // Chargements parallèles : liste de clients + utilisateur connecté +
+  // liste des référents existants (pour la modale de création de client).
+  const [clientsRes, userRes, referentsRes] = await Promise.all([
+    supabase.from('clients').select('id, nom').order('nom'),
+    supabase.auth.getUser(),
+    supabase.from('clients').select('am_referent'),
+  ])
+
+  const clients = clientsRes.data ?? []
+  const currentUserEmail = userRes.data.user?.email ?? null
+  const defaultReferent = referentFromEmail(currentUserEmail)
+
+  // Ensemble des référents déjà normalisés en DB, trié en français.
+  // On s'assure que le référent courant figure dans la liste même s'il
+  // n'a encore géré aucun client.
+  const referentsSet = new Set<string>(
+    (referentsRes.data ?? [])
+      .map((r) => r.am_referent)
+      .filter((r): r is string => !!r && r.trim() !== '')
+  )
+  if (defaultReferent) referentsSet.add(defaultReferent)
+  const availableReferents = Array.from(referentsSet).sort((a, b) =>
+    a.localeCompare(b, 'fr')
+  )
 
   return (
     <div className="max-w-3xl">
@@ -27,9 +48,11 @@ export default async function NouvelleOffrePage({
       )}
 
       <OffreForm
-        clients={clients ?? []}
+        clients={clients}
         initialClientId={client_id ?? ''}
         today={todayIso()}
+        defaultReferent={defaultReferent}
+        availableReferents={availableReferents}
       />
     </div>
   )

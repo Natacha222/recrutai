@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { updateClient } from './actions'
 import StatusBadge from '@/components/StatusBadge'
-import { effectiveStatut, formatValidite } from '@/lib/format'
+import { effectiveStatut, formatValidite, referentFromEmail } from '@/lib/format'
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ error?: string }>
@@ -31,11 +31,31 @@ export default async function ClientDetailPage({
 
   if (!client) notFound()
 
-  const { data: offres } = await supabase
-    .from('offres')
-    .select('id, titre, lieu, statut, date_validite, created_at')
-    .eq('client_id', id)
-    .order('created_at', { ascending: false })
+  const [offresRes, userRes, referentsRes] = await Promise.all([
+    supabase
+      .from('offres')
+      .select('id, titre, lieu, statut, date_validite, created_at')
+      .eq('client_id', id)
+      .order('created_at', { ascending: false }),
+    supabase.auth.getUser(),
+    supabase.from('clients').select('am_referent'),
+  ])
+  const offres = offresRes.data
+
+  // Liste des référents : distincts en base + user connecté + valeur
+  // actuelle du client (pour qu'elle apparaisse dans le select même si
+  // elle n'est plus référente d'aucun autre client).
+  const currentUserReferent = referentFromEmail(userRes.data.user?.email)
+  const referentsSet = new Set<string>(
+    (referentsRes.data ?? [])
+      .map((r) => r.am_referent)
+      .filter((r): r is string => !!r && r.trim() !== '')
+  )
+  if (currentUserReferent) referentsSet.add(currentUserReferent)
+  if (client.am_referent) referentsSet.add(client.am_referent)
+  const availableReferents = Array.from(referentsSet).sort((a, b) =>
+    a.localeCompare(b, 'fr')
+  )
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -101,12 +121,27 @@ export default async function ClientDetailPage({
           </select>
         </div>
 
-        <Field
-          label="Référent"
-          name="am_referent"
-          defaultValue={client.am_referent ?? ''}
-          placeholder="N. MAGNE (1re lettre du prénom, puis nom)"
-        />
+        <div>
+          <label
+            htmlFor="am_referent"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
+            Référent
+          </label>
+          <select
+            id="am_referent"
+            name="am_referent"
+            defaultValue={client.am_referent ?? currentUserReferent ?? ''}
+            className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+          >
+            <option value="">— Sans référent —</option>
+            {availableReferents.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="flex justify-end gap-3 pt-2">
           <Link

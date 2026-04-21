@@ -21,10 +21,7 @@ export async function updateOffre(formData: FormData) {
   const lieu = String(formData.get('lieu') ?? '').trim() || null
   const contratRaw = String(formData.get('contrat') ?? '').trim()
   const contrat = CONTRATS.includes(contratRaw) ? contratRaw : 'CDI'
-  const seuilRaw = Number(formData.get('seuil') ?? 60)
-  const seuil = Number.isFinite(seuilRaw)
-    ? Math.min(100, Math.max(0, Math.round(seuilRaw)))
-    : 60
+  const seuilRaw = Number(formData.get('seuil'))
   const dateValiditeRaw = String(formData.get('date_validite') ?? '').trim()
   const date_validite = ISO_DATE_RE.test(dateValiditeRaw)
     ? dateValiditeRaw
@@ -36,6 +33,17 @@ export async function updateOffre(formData: FormData) {
       `/offres/${id}?error=Le+titre+et+le+client+sont+obligatoires`
     )
   }
+  if (
+    !Number.isFinite(seuilRaw) ||
+    seuilRaw < 0 ||
+    seuilRaw > 100 ||
+    !Number.isInteger(seuilRaw)
+  ) {
+    return redirect(
+      `/offres/${id}?error=Le+seuil+doit+%C3%AAtre+un+entier+compris+entre+0+et+100`
+    )
+  }
+  const seuil = seuilRaw
   if (!date_validite) {
     return redirect(
       `/offres/${id}?error=La+date+de+validit%C3%A9+est+obligatoire`
