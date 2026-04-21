@@ -3,6 +3,12 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
 import { formatValidite, effectiveStatut, isExpired } from '@/lib/format'
+import {
+  DateFilter,
+  FiltersReset,
+  SelectFilter,
+  TextFilter,
+} from '@/components/TableFilters'
 import CVUploader from './CVUploader'
 import CandidatureActions from './CandidatureActions'
 import DeleteAllCandidaturesButton from './DeleteAllCandidaturesButton'
@@ -10,11 +16,21 @@ import DeleteAllCandidaturesButton from './DeleteAllCandidaturesButton'
 type CandidatureFilter = 'qualifié' | 'en attente' | 'rejeté'
 const FILTERS: CandidatureFilter[] = ['qualifié', 'en attente', 'rejeté']
 
+const CAND_FILTER_FIELDS = ['filter', 'cand_q', 'just_q', 'recu_from']
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{
   error?: string
   saved?: string
+  /** Statut de candidature : qualifié | en attente | rejeté. */
   filter?: string
+  /** Recherche texte sur nom + email du candidat. */
+  cand_q?: string
+  /** Recherche texte sur la justification IA. */
+  just_q?: string
+  /** YYYY-MM-DD — garde les candidatures reçues à cette date ou après. */
+  recu_from?: string
 }>
 
 export default async function OffreDetailPage({
@@ -25,12 +41,24 @@ export default async function OffreDetailPage({
   searchParams: SearchParams
 }) {
   const { id } = await params
-  const { error, saved, filter } = await searchParams
+  const {
+    error,
+    saved,
+    filter,
+    cand_q = '',
+    just_q = '',
+    recu_from = '',
+  } = await searchParams
   const activeFilter: CandidatureFilter | null = FILTERS.includes(
     filter as CandidatureFilter
   )
     ? (filter as CandidatureFilter)
     : null
+  // Ignore silencieusement une date mal formée (param URL corrompu) pour
+  // ne pas casser la page — l'input type=date garantit le format ISO.
+  const recuFromEffective = ISO_DATE_RE.test(recu_from) ? recu_from : ''
+  const candQLower = cand_q.trim().toLowerCase()
+  const justQLower = just_q.trim().toLowerCase()
   const supabase = await createClient()
 
   const { data: offre } = await supabase
@@ -61,10 +89,37 @@ export default async function OffreDetailPage({
 
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0)
 
-  // Filtre appliqué au tableau si l'utilisateur a cliqué sur un KPI
-  const filteredCandidatures = activeFilter
-    ? (candidatures ?? []).filter((c) => c.statut === activeFilter)
-    : (candidatures ?? [])
+  // Filtres appliqués au tableau : combinaison du KPI (statut) + filtres de
+  // colonne (recherche texte + date de réception). Toutes les conditions
+  // sont cumulatives.
+  const filteredCandidatures = (candidatures ?? []).filter((c) => {
+    if (activeFilter && c.statut !== activeFilter) return false
+    if (
+      candQLower &&
+      !`${c.nom ?? ''} ${c.email ?? ''}`.toLowerCase().includes(candQLower)
+    ) {
+      return false
+    }
+    if (
+      justQLower &&
+      !(c.justification_ia ?? '').toLowerCase().includes(justQLower)
+    ) {
+      return false
+    }
+    if (recuFromEffective) {
+      // created_at est un timestamp ISO, les 10 premiers caractères donnent
+      // la date YYYY-MM-DD qu'on compare lexicographiquement.
+      const createdDate = (c.created_at ?? '').slice(0, 10)
+      if (!createdDate || createdDate < recuFromEffective) return false
+    }
+    return true
+  })
+  const hasCandFilter = !!(
+    activeFilter ||
+    candQLower ||
+    justQLower ||
+    recuFromEffective
+  )
 
   const clientInfo = Array.isArray(offre.clients)
     ? offre.clients[0]
@@ -75,6 +130,21 @@ export default async function OffreDetailPage({
   const effectiveOffreStatut = effectiveStatut(offre.statut, offre.date_validite)
   const autoClosed =
     offre.statut !== 'clos' && isExpired(offre.date_validite)
+
+  // Construit un href KPI qui conserve les autres filtres de candidature
+  // (texte, date) — seul le paramètre `filter` (statut) est remplacé.
+  // On capture offre.id dans un const local car TypeScript ne propage pas
+  // le narrowing de `notFound()` à travers la closure.
+  const offreId = offre.id
+  function kpiHref(statut: CandidatureFilter | null): string {
+    const sp = new URLSearchParams()
+    if (cand_q) sp.set('cand_q', cand_q)
+    if (just_q) sp.set('just_q', just_q)
+    if (recuFromEffective) sp.set('recu_from', recuFromEffective)
+    if (statut) sp.set('filter', statut)
+    const qs = sp.toString()
+    return qs ? `/offres/${offreId}?${qs}` : `/offres/${offreId}`
+  }
 
   return (
     <div className="space-y-6">
@@ -125,7 +195,7 @@ export default async function OffreDetailPage({
         <Kpi
           label="CV reçus"
           value={total}
-          href={`/offres/${offre.id}`}
+          href={kpiHref(null)}
           active={activeFilter === null}
         />
         <Kpi
@@ -133,7 +203,7 @@ export default async function OffreDetailPage({
           value={qualifies}
           sub={`${pct(qualifies)}% du total`}
           color="text-status-green"
-          href={`/offres/${offre.id}?filter=qualifi%C3%A9`}
+          href={kpiHref('qualifié')}
           active={activeFilter === 'qualifié'}
         />
         <Kpi
@@ -141,7 +211,7 @@ export default async function OffreDetailPage({
           value={enAttente}
           sub={`${pct(enAttente)}% du total`}
           color="text-status-amber"
-          href={`/offres/${offre.id}?filter=en+attente`}
+          href={kpiHref('en attente')}
           active={activeFilter === 'en attente'}
         />
         <Kpi
@@ -149,7 +219,7 @@ export default async function OffreDetailPage({
           value={rejetes}
           sub={`${pct(rejetes)}% du total`}
           color="text-status-red"
-          href={`/offres/${offre.id}?filter=rejet%C3%A9`}
+          href={kpiHref('rejeté')}
           active={activeFilter === 'rejeté'}
         />
         <Kpi
@@ -165,24 +235,19 @@ export default async function OffreDetailPage({
         disabled={effectiveOffreStatut === 'clos'}
       />
 
-      {/* Candidatures — filtrables via les KPIs */}
+      {/* Candidatures — filtrables via les KPIs ou les colonnes */}
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
         <div className="px-6 py-4 border-b border-border-soft flex items-center justify-between gap-3 flex-wrap">
           <h2 className="font-semibold">
-            {activeFilter
-              ? `Candidatures « ${activeFilter} » (${filteredCandidatures.length})`
+            {hasCandFilter
+              ? `${filteredCandidatures.length} résultat${
+                  filteredCandidatures.length > 1 ? 's' : ''
+                } sur ${total}`
               : `Candidatures reçues (${total})`}
           </h2>
           <div className="flex items-center gap-3 flex-wrap">
-            {activeFilter && (
-              <Link
-                href={`/offres/${offre.id}`}
-                className="text-xs text-brand-purple hover:underline"
-              >
-                ← Voir toutes les candidatures
-              </Link>
-            )}
-            {!activeFilter && (
+            <FiltersReset fields={CAND_FILTER_FIELDS} />
+            {!hasCandFilter && (
               <DeleteAllCandidaturesButton offreId={offre.id} total={total} />
             )}
           </div>
@@ -190,12 +255,32 @@ export default async function OffreDetailPage({
         <table className="w-full">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <th className="px-6 py-3">Candidat / Email</th>
-              <th className="px-6 py-3">Score IA</th>
-              <th className="px-6 py-3 w-1/3">Justification IA</th>
-              <th className="px-6 py-3">Statut</th>
-              <th className="px-6 py-3">Reçu le</th>
-              <th className="px-6 py-3">CV / Action</th>
+              <th className="px-6 pt-3 pb-2">Candidat / Email</th>
+              <th className="px-6 pt-3 pb-2">Score IA</th>
+              <th className="px-6 pt-3 pb-2 w-1/3">Justification IA</th>
+              <th className="px-6 pt-3 pb-2">Statut</th>
+              <th className="px-6 pt-3 pb-2">Reçu le</th>
+              <th className="px-6 pt-3 pb-2">CV / Action</th>
+            </tr>
+            <tr className="align-top">
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <TextFilter field="cand_q" placeholder="Nom ou email…" />
+              </th>
+              <th className="px-6 pt-0 pb-3"></th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <TextFilter field="just_q" placeholder="Mot-clé…" />
+              </th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <SelectFilter
+                  field="filter"
+                  options={FILTERS}
+                  placeholder="Tous"
+                />
+              </th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <DateFilter field="recu_from" />
+              </th>
+              <th className="px-6 pt-0 pb-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-soft">
@@ -251,8 +336,8 @@ export default async function OffreDetailPage({
             {filteredCandidatures.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-6 py-8 text-center text-muted">
-                  {activeFilter
-                    ? `Aucune candidature « ${activeFilter} ».`
+                  {hasCandFilter
+                    ? 'Aucune candidature ne correspond à ces filtres.'
                     : 'Aucune candidature reçue pour le moment.'}
                 </td>
               </tr>
