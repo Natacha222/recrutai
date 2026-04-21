@@ -1,11 +1,19 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { referentFromEmail } from '@/lib/format'
+import { getAvailableReferents } from '@/lib/referents'
 import { createClientAction } from './actions'
+import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
 
 type SearchParams = Promise<{ error?: string }>
 
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
+
+// Les actions serveur préfixent le message par « Un client nommé » quand on
+// détecte un doublon : c'est le marqueur qui déclenche la bannière à 2 choix.
+function isDuplicateError(err: string | undefined): err is string {
+  return !!err && err.startsWith('Un client nommé')
+}
 
 export default async function NouveauClientPage({
   searchParams,
@@ -14,34 +22,31 @@ export default async function NouveauClientPage({
 }) {
   const { error } = await searchParams
 
-  // User connecté + liste des référents distincts déjà en base.
+  // User connecté + liste des référents distincts (union clients + offres).
   // L'user courant est toujours ajouté à la liste pour qu'il puisse se
-  // sélectionner même s'il n'a encore aucun client.
+  // sélectionner même s'il n'a encore aucun client ni aucune offre.
   const supabase = await createClient()
-  const [userRes, referentsRes] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase.from('clients').select('am_referent'),
-  ])
+  const userRes = await supabase.auth.getUser()
   const defaultReferent = referentFromEmail(userRes.data.user?.email)
-  const referentsSet = new Set<string>(
-    (referentsRes.data ?? [])
-      .map((r) => r.am_referent)
-      .filter((r): r is string => !!r && r.trim() !== '')
-  )
-  if (defaultReferent) referentsSet.add(defaultReferent)
-  const availableReferents = Array.from(referentsSet).sort((a, b) =>
-    a.localeCompare(b, 'fr')
-  )
+  const availableReferents = await getAvailableReferents(supabase, [
+    defaultReferent,
+  ])
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold mb-6">Nouveau client</h1>
 
-      {error && (
+      {isDuplicateError(error) ? (
+        <DuplicateClientErrorBanner
+          message={error}
+          cancelHref="/clients"
+          nameInputId="nom"
+        />
+      ) : error ? (
         <div className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
           {error}
         </div>
-      )}
+      ) : null}
 
       <form
         action={createClientAction}

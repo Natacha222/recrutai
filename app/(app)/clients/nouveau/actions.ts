@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { formatReferent } from '@/lib/format'
+import { formatReferent, normalizeClientName } from '@/lib/format'
 
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
 
@@ -22,6 +22,22 @@ export async function createClientAction(formData: FormData) {
 
   if (!nom) {
     return redirect('/clients/nouveau?error=Le+nom+est+obligatoire')
+  }
+
+  // Détection de doublon : compare le nom normalisé (casse/accents/espaces)
+  // avec les noms existants. On bloque la création pour forcer l'utilisateur
+  // à préciser ce qui différencie le nouveau client (filiale, ville, etc.).
+  const { data: existing } = await supabase.from('clients').select('nom')
+  const targetNorm = normalizeClientName(nom)
+  const duplicate = (existing ?? []).find(
+    (c) => normalizeClientName(c.nom ?? '') === targetNorm
+  )
+  if (duplicate) {
+    // Le préfixe « Un client nommé » est reconnu par la page pour afficher
+    // la bannière à 2 choix (abandonner / modifier le nom). Les options
+    // détaillées sont fournies par la bannière, pas par ce message.
+    const msg = `Un client nommé « ${duplicate.nom} » existe déjà.`
+    return redirect(`/clients/nouveau?error=${encodeURIComponent(msg)}`)
   }
 
   const { data, error } = await supabase

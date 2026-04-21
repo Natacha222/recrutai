@@ -3,12 +3,20 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { updateClient } from './actions'
 import StatusBadge from '@/components/StatusBadge'
+import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
 import { effectiveStatut, formatValidite, referentFromEmail } from '@/lib/format'
+import { getAvailableReferents } from '@/lib/referents'
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ error?: string }>
 
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
+
+// Les actions serveur préfixent le message par « Un client nommé » quand on
+// détecte un doublon : c'est le marqueur qui déclenche la bannière à 2 choix.
+function isDuplicateError(err: string | undefined): err is string {
+  return !!err && err.startsWith('Un client nommé')
+}
 
 export default async function ClientDetailPage({
   params,
@@ -31,31 +39,24 @@ export default async function ClientDetailPage({
 
   if (!client) notFound()
 
-  const [offresRes, userRes, referentsRes] = await Promise.all([
+  const [offresRes, userRes] = await Promise.all([
     supabase
       .from('offres')
       .select('id, titre, lieu, statut, date_validite, created_at')
       .eq('client_id', id)
       .order('created_at', { ascending: false }),
     supabase.auth.getUser(),
-    supabase.from('clients').select('am_referent'),
   ])
   const offres = offresRes.data
 
-  // Liste des référents : distincts en base + user connecté + valeur
+  // Liste des référents : union clients + offres + user connecté + valeur
   // actuelle du client (pour qu'elle apparaisse dans le select même si
-  // elle n'est plus référente d'aucun autre client).
+  // elle n'est plus référente d'aucune autre entité).
   const currentUserReferent = referentFromEmail(userRes.data.user?.email)
-  const referentsSet = new Set<string>(
-    (referentsRes.data ?? [])
-      .map((r) => r.am_referent)
-      .filter((r): r is string => !!r && r.trim() !== '')
-  )
-  if (currentUserReferent) referentsSet.add(currentUserReferent)
-  if (client.am_referent) referentsSet.add(client.am_referent)
-  const availableReferents = Array.from(referentsSet).sort((a, b) =>
-    a.localeCompare(b, 'fr')
-  )
+  const availableReferents = await getAvailableReferents(supabase, [
+    currentUserReferent,
+    client.am_referent,
+  ])
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -70,11 +71,17 @@ export default async function ClientDetailPage({
         </p>
       </div>
 
-      {error && (
+      {isDuplicateError(error) ? (
+        <DuplicateClientErrorBanner
+          message={error}
+          cancelHref="/clients"
+          nameInputId="nom"
+        />
+      ) : error ? (
         <div className="px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
           {error}
         </div>
-      )}
+      ) : null}
 
       <form
         action={updateClient}
