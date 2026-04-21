@@ -22,11 +22,106 @@ export default async function DashboardPage() {
     .select('*', { count: 'exact', head: true })
     .eq('statut', 'qualifié')
 
-  const { data: recent } = await supabase
-    .from('candidatures')
-    .select('id, nom, email, score_ia, statut, created_at, offres(id, titre)')
-    .order('created_at', { ascending: false })
-    .limit(5)
+  // Feed d'activités unifié : on fetch les 5 derniers objets créés dans
+  // chaque table principale (candidatures, clients, offres), on merge,
+  // on trie par created_at desc et on garde les 5 plus récents. Sans
+  // table d'audit log, c'est notre meilleure approximation d'un vrai
+  // fil d'activité — on ne capture que les créations, pas les
+  // changements de statut.
+  const [
+    { data: recentCandidatures },
+    { data: recentClients },
+    { data: recentOffres },
+  ] = await Promise.all([
+    supabase
+      .from('candidatures')
+      .select(
+        'id, nom, email, score_ia, statut, created_at, offres(id, titre)'
+      )
+      .order('created_at', { ascending: false })
+      .limit(5),
+    supabase
+      .from('clients')
+      .select('id, nom, created_at')
+      .order('created_at', { ascending: false })
+      .limit(5),
+    supabase
+      .from('offres')
+      .select('id, titre, created_at, clients(id, nom)')
+      .order('created_at', { ascending: false })
+      .limit(5),
+  ])
+
+  type OffreRef = { id: string; titre: string } | null
+  type ClientRef = { id: string; nom: string } | null
+
+  type Activite =
+    | {
+        type: 'candidature'
+        id: string
+        nom: string | null
+        email: string | null
+        scoreIa: number | null
+        statut: string | null
+        offre: OffreRef
+        createdAt: string
+      }
+    | {
+        type: 'client'
+        id: string
+        nom: string
+        createdAt: string
+      }
+    | {
+        type: 'offre'
+        id: string
+        titre: string
+        client: ClientRef
+        createdAt: string
+      }
+
+  const activites: Activite[] = [
+    ...(recentCandidatures ?? []).map((c): Activite => {
+      const offreInfo = (Array.isArray(c.offres)
+        ? c.offres[0]
+        : c.offres) as OffreRef
+      return {
+        type: 'candidature',
+        id: c.id,
+        nom: c.nom,
+        email: c.email,
+        scoreIa: c.score_ia,
+        statut: c.statut,
+        offre: offreInfo,
+        createdAt: c.created_at,
+      }
+    }),
+    ...(recentClients ?? []).map(
+      (c): Activite => ({
+        type: 'client',
+        id: c.id,
+        nom: c.nom,
+        createdAt: c.created_at,
+      })
+    ),
+    ...(recentOffres ?? []).map((o): Activite => {
+      const clientInfo = (Array.isArray(o.clients)
+        ? o.clients[0]
+        : o.clients) as ClientRef
+      return {
+        type: 'offre',
+        id: o.id,
+        titre: o.titre,
+        client: clientInfo,
+        createdAt: o.created_at,
+      }
+    }),
+  ]
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    .slice(0, 5)
 
   // Qualité IA : on fetch toutes les candidatures scorées avec le seuil de
   // leur offre pour calculer des indicateurs globaux sur la qualité du
@@ -87,21 +182,6 @@ export default async function DashboardPage() {
     totalScored > 0
       ? Math.round((incompletsCount / totalScored) * 100)
       : 0
-
-  // Histogramme : 10 tranches de 10 points (0-9, 10-19, …, 90-100) pour
-  // visualiser la distribution des scores IA. On clamp l'index entre 0 et 9
-  // au cas où un score déborde de [0, 100] (défense contre données
-  // corrompues). Les buckets vides restent affichés pour que l'axe soit
-  // lisible.
-  const histogramBuckets = Array.from({ length: 10 }, (_, i) => ({
-    label: i === 9 ? '90-100' : `${i * 10}-${i * 10 + 9}`,
-    count: 0,
-  }))
-  scored.forEach((c) => {
-    const bucket = Math.min(9, Math.max(0, Math.floor(c.score_ia / 10)))
-    histogramBuckets[bucket].count++
-  })
-  const maxBucketCount = Math.max(...histogramBuckets.map((b) => b.count), 1)
 
   // Répartition par statut sur l'ensemble des candidatures scorées : barre
   // empilée verte/ambre/rouge pour voir en un coup d'œil la proportion de
@@ -205,208 +285,190 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* Visualisations — graphes simples en CSS pour éviter une
-          dépendance de charting lourde. Chaque graphe a un fallback
-          accessible via <table className="sr-only">. */}
-      <section aria-labelledby="graphs-heading">
+      {/* Répartition des candidatures — barre empilée pleine largeur +
+          légende. Fallback accessible via role="img" + aria-label. */}
+      <section aria-labelledby="repartition-heading">
         <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
-          <h2 id="graphs-heading" className="text-lg font-semibold">
-            Visualisations
+          <h2
+            id="repartition-heading"
+            className="text-lg font-semibold"
+          >
+            Répartition des candidatures
           </h2>
           <p className="text-sm text-muted">
-            Distribution des scores et répartition des statuts
+            Vue globale des statuts sur l&apos;ensemble des CV scorés
           </p>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft">
-            <h3 className="text-sm text-muted font-medium mb-4">
-              Distribution des scores IA
-            </h3>
-            {totalScored > 0 ? (
-              <>
-                <div
-                  className="flex items-end gap-1 h-40"
-                  role="img"
-                  aria-label={`Histogramme de distribution des scores IA sur ${totalScored} CV scoré${totalScored > 1 ? 's' : ''}`}
-                >
-                  {histogramBuckets.map((b) => {
-                    const pct = (b.count / maxBucketCount) * 100
-                    return (
-                      <div
-                        key={b.label}
-                        className="flex-1 flex flex-col items-center justify-end"
-                        title={`${b.label}\u00A0: ${b.count} CV`}
-                      >
-                        <div
-                          className={`w-full rounded-t ${
-                            b.count > 0
-                              ? 'bg-brand-purple'
-                              : 'bg-border-soft'
-                          }`}
-                          style={{ height: `${Math.max(pct, 2)}%` }}
-                        />
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="flex justify-between mt-2 text-xs text-muted">
-                  <span>0</span>
-                  <span>50</span>
-                  <span>100</span>
-                </div>
-                <table className="sr-only">
-                  <caption>Distribution des scores IA par tranche</caption>
-                  <thead>
-                    <tr>
-                      <th>Tranche</th>
-                      <th>Nombre de CV</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {histogramBuckets.map((b) => (
-                      <tr key={b.label}>
-                        <td>{b.label}</td>
-                        <td>{b.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
-            ) : (
-              <p className="text-sm text-muted py-12 text-center">
-                Aucune donnée pour le moment.
-              </p>
-            )}
-          </div>
-
-          <div className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft">
-            <h3 className="text-sm text-muted font-medium mb-4">
-              Répartition des candidatures
-            </h3>
-            {totalStatut > 0 ? (
-              <>
-                <div
-                  className="flex h-8 rounded-md overflow-hidden"
-                  role="img"
-                  aria-label={`Répartition de ${totalStatut} candidature${totalStatut > 1 ? 's' : ''} par statut`}
-                >
-                  {statutBreakdown.map((s) => {
-                    const pct = (s.count / totalStatut) * 100
-                    return (
-                      <div
-                        key={s.key}
-                        className={`${s.className} flex items-center justify-center text-white text-xs font-semibold`}
-                        style={{ width: `${pct}%` }}
-                        title={`${s.label}\u00A0: ${s.count} (${Math.round(pct)}\u00A0%)`}
-                      >
-                        {pct >= 10 ? `${Math.round(pct)}\u00A0%` : ''}
-                      </div>
-                    )
-                  })}
-                </div>
-                <ul className="mt-4 space-y-2">
-                  {statutBreakdown.map((s) => (
-                    <li
+        <div className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft">
+          {totalStatut > 0 ? (
+            <>
+              <div
+                className="flex h-8 rounded-md overflow-hidden"
+                role="img"
+                aria-label={`Répartition de ${totalStatut} candidature${totalStatut > 1 ? 's' : ''} par statut`}
+              >
+                {statutBreakdown.map((s) => {
+                  const pct = (s.count / totalStatut) * 100
+                  return (
+                    <div
                       key={s.key}
-                      className="flex items-center justify-between text-sm"
+                      className={`${s.className} flex items-center justify-center text-white text-xs font-semibold`}
+                      style={{ width: `${pct}%` }}
+                      title={`${s.label}\u00A0: ${s.count} (${Math.round(pct)}\u00A0%)`}
                     >
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`inline-block w-3 h-3 rounded-sm ${s.className}`}
-                          aria-hidden
-                        />
-                        <span>{s.label}</span>
-                      </span>
-                      <span className="text-muted tabular-nums">
-                        {s.count} (
-                        {Math.round((s.count / totalStatut) * 100)}
-                        {'\u00A0%'})
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p className="text-sm text-muted py-12 text-center">
-                Aucune donnée pour le moment.
-              </p>
-            )}
-          </div>
+                      {pct >= 10 ? `${Math.round(pct)}\u00A0%` : ''}
+                    </div>
+                  )
+                })}
+              </div>
+              <ul className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {statutBreakdown.map((s) => (
+                  <li
+                    key={s.key}
+                    className="flex items-center justify-between text-sm"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`inline-block w-3 h-3 rounded-sm ${s.className}`}
+                        aria-hidden
+                      />
+                      <span>{s.label}</span>
+                    </span>
+                    <span className="text-muted tabular-nums">
+                      {s.count} (
+                      {Math.round((s.count / totalStatut) * 100)}
+                      {'\u00A0%'})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-sm text-muted py-8 text-center">
+              Aucune donnée pour le moment.
+            </p>
+          )}
         </div>
       </section>
 
-      {/* Activité récente */}
-      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
+      {/* Activité récente — feed unifié : nouveaux clients, nouvelles
+          offres, nouvelles candidatures. Triés par created_at desc,
+          limités aux 5 plus récents. Pas d'audit log sur les changements
+          de statut — juste les créations. */}
+      <div className="bg-surface-alt rounded-xl border border-border-soft">
         <div className="px-6 py-4 border-b border-border-soft">
           <h2 className="font-semibold">Activité récente</h2>
           <p className="text-sm text-muted mt-0.5">
-            Les 5 dernières candidatures reçues
+            Les 5 derniers événements sur la plateforme
           </p>
         </div>
-        <table className="w-full">
-          <thead className="bg-surface">
-            <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <th className="px-6 py-3">Candidat</th>
-              <th className="px-6 py-3">Offre</th>
-              <th className="px-6 py-3">Score</th>
-              <th className="px-6 py-3">Statut</th>
-              <th className="px-6 py-3">Reçu le</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-soft">
-            {recent?.map((c) => {
-              const offreInfo = Array.isArray(c.offres)
-                ? c.offres[0]
-                : (c.offres as { id: string; titre: string } | null)
-              return (
-                <tr key={c.id} className="text-sm">
-                  <td className="px-6 py-4">
-                    <div className="font-medium">{c.nom}</div>
-                    <div className="text-muted text-sm">{c.email}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {offreInfo ? (
-                      <Link
-                        href={`/offres/${offreInfo.id}`}
-                        className="text-brand-purple font-medium hover:underline"
-                      >
-                        {offreInfo.titre}
-                      </Link>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`font-bold ${
-                        (c.score_ia ?? 0) >= 70
-                          ? 'text-status-green'
-                          : (c.score_ia ?? 0) >= 50
-                            ? 'text-status-amber'
-                            : 'text-status-red'
-                      }`}
-                    >
-                      {c.score_ia ?? '—'}
+        <ul className="divide-y divide-border-soft">
+          {activites.map((a) => (
+            <li
+              key={`${a.type}-${a.id}`}
+              className="px-6 py-4 flex items-start justify-between gap-4 text-sm flex-wrap"
+            >
+              {a.type === 'candidature' && (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-brand-purple font-semibold">
+                      Nouvelle candidature
                     </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={c.statut ?? 'en attente'} />
-                  </td>
-                  <td className="px-6 py-4 text-muted">
-                    {fmtDate(c.created_at)}
-                  </td>
-                </tr>
-              )
-            })}
-            {(!recent || recent.length === 0) && (
-              <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-muted">
-                  Aucune activité récente.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                    <span className="text-muted"> • </span>
+                    <span className="font-medium">
+                      {a.nom?.trim() || 'Candidat'}
+                    </span>
+                    {a.offre && (
+                      <>
+                        <span className="text-muted"> → </span>
+                        <Link
+                          href={`/offres/${a.offre.id}`}
+                          className="text-brand-purple hover:underline font-medium"
+                        >
+                          {a.offre.titre}
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {a.scoreIa !== null && (
+                      <span
+                        className={`font-bold ${
+                          a.scoreIa >= 70
+                            ? 'text-status-green'
+                            : a.scoreIa >= 50
+                              ? 'text-status-amber'
+                              : 'text-status-red'
+                        }`}
+                        aria-label={`Score ${a.scoreIa} sur 100`}
+                      >
+                        {a.scoreIa}
+                      </span>
+                    )}
+                    <StatusBadge status={a.statut ?? 'en attente'} />
+                    <span className="text-muted text-xs tabular-nums">
+                      {fmtDate(a.createdAt)}
+                    </span>
+                  </div>
+                </>
+              )}
+              {a.type === 'client' && (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-brand-indigo-text font-semibold">
+                      Nouveau client
+                    </span>
+                    <span className="text-muted"> • </span>
+                    <Link
+                      href={`/clients/${a.id}`}
+                      className="font-medium text-brand-indigo-text hover:text-brand-purple"
+                    >
+                      {a.nom}
+                    </Link>
+                  </div>
+                  <span className="text-muted text-xs tabular-nums shrink-0">
+                    {fmtDate(a.createdAt)}
+                  </span>
+                </>
+              )}
+              {a.type === 'offre' && (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-status-amber font-semibold">
+                      Nouvelle offre
+                    </span>
+                    <span className="text-muted"> • </span>
+                    <Link
+                      href={`/offres/${a.id}`}
+                      className="font-medium text-brand-indigo-text hover:text-brand-purple"
+                    >
+                      {a.titre}
+                    </Link>
+                    {a.client && (
+                      <>
+                        <span className="text-muted"> chez </span>
+                        <Link
+                          href={`/clients/${a.client.id}`}
+                          className="hover:underline"
+                        >
+                          {a.client.nom}
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-muted text-xs tabular-nums shrink-0">
+                    {fmtDate(a.createdAt)}
+                  </span>
+                </>
+              )}
+            </li>
+          ))}
+          {activites.length === 0 && (
+            <li className="px-6 py-8 text-center text-muted text-sm">
+              Aucune activité récente.
+            </li>
+          )}
+        </ul>
       </div>
     </div>
   )
