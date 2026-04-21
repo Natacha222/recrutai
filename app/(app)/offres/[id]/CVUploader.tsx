@@ -1,10 +1,37 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ingestCVs } from './actions'
 
 type Status = 'idle' | 'uploading' | 'scoring' | 'done' | 'error'
+
+// Estimations de durée (en secondes) pour informer l'utilisateur. Ce sont
+// des ordres de grandeur observés :
+//   - upload Supabase : ~2s par PDF (réseau + taille fichier)
+//   - scoring IA : les appels Claude tournent en parallèle côté serveur,
+//     donc on considère une base fixe ~18s + un léger surcoût par CV
+//     additionnel (throttling, overhead download + insert)
+const UPLOAD_SEC_PER_FILE = 2
+const SCORING_BASE_SEC = 18
+const SCORING_EXTRA_SEC_PER_FILE = 2.5
+
+function estimateUploadSec(nFiles: number): number {
+  return nFiles * UPLOAD_SEC_PER_FILE
+}
+
+function estimateScoringSec(nFiles: number): number {
+  if (nFiles <= 0) return 0
+  return SCORING_BASE_SEC + (nFiles - 1) * SCORING_EXTRA_SEC_PER_FILE
+}
+
+function formatSec(s: number): string {
+  const rounded = Math.max(0, Math.round(s))
+  if (rounded < 60) return `${rounded}s`
+  const m = Math.floor(rounded / 60)
+  const rest = rounded % 60
+  return rest === 0 ? `${m}min` : `${m}min${rest.toString().padStart(2, '0')}`
+}
 
 export default function CVUploader({
   offreId,
@@ -19,7 +46,22 @@ export default function CVUploader({
     current: 0,
     total: 0,
   })
+  // Chrono : temps écoulé depuis le début de la phase en cours
+  // (upload ou scoring). Remis à 0 à chaque changement de phase.
+  const [elapsedSec, setElapsedSec] = useState(0)
+  const phaseStartRef = useRef<number>(0)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Incrémente elapsedSec toutes les 250ms pendant les phases actives.
+  // Se nettoie automatiquement quand on sort de uploading/scoring.
+  useEffect(() => {
+    if (status !== 'uploading' && status !== 'scoring') return
+    const tick = () =>
+      setElapsedSec((Date.now() - phaseStartRef.current) / 1000)
+    tick()
+    const id = setInterval(tick, 250)
+    return () => clearInterval(id)
+  }, [status])
 
   async function handleFiles(files: FileList | null) {
     if (disabled) return
@@ -37,6 +79,8 @@ export default function CVUploader({
     }
 
     const supabase = createClient()
+    phaseStartRef.current = Date.now()
+    setElapsedSec(0)
     setStatus('uploading')
     setMessage('')
     setProgress({ current: 0, total: pdfFiles.length })
@@ -58,8 +102,12 @@ export default function CVUploader({
         setProgress({ current: i + 1, total: pdfFiles.length })
       }
 
+      // Passage en phase scoring : on réinitialise le chrono pour afficher
+      // le temps de cette phase (plus long et moins visible que l'upload).
+      phaseStartRef.current = Date.now()
+      setElapsedSec(0)
       setStatus('scoring')
-      setMessage('Scoring IA en cours…')
+
       const result = await ingestCVs({ offreId, uploads })
       if (!result.ok) throw new Error(result.error)
 
@@ -99,6 +147,24 @@ export default function CVUploader({
   const isBusy = status === 'uploading' || status === 'scoring'
   const blocked = disabled || isBusy
 
+  // Barre de progression :
+  //   - upload : on connaît current/total, on utilise ça (progression réelle)
+  //   - scoring : on approxime avec elapsedSec / estimation, plafonné à 95 %
+  //     pour éviter la « fausse complétion » quand ça déborde l'estimation
+  const estimateSec =
+    status === 'uploading'
+      ? estimateUploadSec(progress.total)
+      : status === 'scoring'
+        ? estimateScoringSec(progress.total)
+        : 0
+  const phaseProgressPct =
+    status === 'uploading' && progress.total > 0
+      ? (progress.current / progress.total) * 100
+      : status === 'scoring' && estimateSec > 0
+        ? Math.min(95, (elapsedSec / estimateSec) * 100)
+        : 0
+  const overrun = status === 'scoring' && elapsedSec > estimateSec
+
   return (
     <div className="bg-surface-alt rounded-xl p-6 border border-border-soft">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -107,7 +173,7 @@ export default function CVUploader({
           <p className="text-sm text-muted">
             {disabled
               ? "Cette offre est clôturée. Réactive-la pour pouvoir joindre de nouveaux CVs."
-              : "Dépose un ou plusieurs fichiers PDF. Le scoring IA se lance automatiquement après l'upload."}
+              : "Dépose un ou plusieurs fichiers PDF. Le scoring IA se lance automatiquement après l'upload (compter ~20s de traitement par lot)."}
           </p>
         </div>
 
@@ -132,10 +198,40 @@ export default function CVUploader({
       </div>
 
       {isBusy && (
-        <div className="mt-4 text-sm text-muted">
-          {status === 'uploading'
-            ? `Upload ${progress.current}/${progress.total}…`
-            : 'Scoring IA en cours…'}
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-muted">
+              {status === 'uploading'
+                ? `Upload ${progress.current}/${progress.total} fichier${
+                    progress.total > 1 ? 's' : ''
+                  }…`
+                : `Scoring IA de ${progress.total} CV${
+                    progress.total > 1 ? 's' : ''
+                  }…`}
+            </span>
+            <span className="text-muted text-xs font-mono tabular-nums">
+              {formatSec(elapsedSec)}
+              {estimateSec > 0 ? ` / ~${formatSec(estimateSec)}` : ''}
+            </span>
+          </div>
+          <div
+            className="h-2 w-full bg-surface rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={Math.round(phaseProgressPct)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className="h-full bg-brand-purple transition-[width] duration-300 ease-out"
+              style={{ width: `${phaseProgressPct}%` }}
+            />
+          </div>
+          {overrun && (
+            <p className="text-xs text-muted">
+              Le scoring prend un peu plus de temps que prévu, merci de
+              patienter…
+            </p>
+          )}
         </div>
       )}
 
