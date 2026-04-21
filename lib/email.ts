@@ -7,8 +7,11 @@ import { Resend } from 'resend'
  * NOTIFICATION_EMAIL_OVERRIDE (ex : n.magne@agoriade.fr).
  * En production, on utilisera l'email du client de l'offre.
  *
- * From : onboarding@resend.dev par défaut — à remplacer par un domaine
- * vérifié via RESEND_FROM une fois la DNS prête.
+ * From : "RecrutAI <onboarding@resend.dev>" par défaut. L'adresse technique
+ * reste celle de Resend (seule `onboarding@resend.dev` est autorisée en
+ * mode test), mais le display name RecrutAI s'affiche dans les boîtes mail
+ * à la place de "onboarding". À remplacer par un domaine vérifié via
+ * RESEND_FROM (ex : "RecrutAI <contact@agoriade.fr>") une fois la DNS prête.
  */
 export async function sendQualifiedCandidateEmail({
   to,
@@ -37,7 +40,7 @@ export async function sendQualifiedCandidateEmail({
   }
 
   const resend = new Resend(apiKey)
-  const from = process.env.RESEND_FROM ?? 'onboarding@resend.dev'
+  const from = process.env.RESEND_FROM ?? 'RecrutAI <onboarding@resend.dev>'
 
   const subject = `${offreTitle} - nouveau CV qualifié`
 
