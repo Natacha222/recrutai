@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { scoreCandidate } from '@/lib/scoring'
 import { sendQualifiedCandidateEmail } from '@/lib/email'
-import { effectiveStatut, todayIso } from '@/lib/format'
+import { effectiveStatut, formatReferent, todayIso } from '@/lib/format'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 
@@ -26,6 +26,9 @@ export async function updateOffre(formData: FormData) {
   const date_validite = ISO_DATE_RE.test(dateValiditeRaw)
     ? dateValiditeRaw
     : null
+  const am_referent = formatReferent(
+    String(formData.get('am_referent') ?? '')
+  )
 
   if (!id) return redirect('/offres?error=Offre+introuvable')
   if (!titre || !client_id) {
@@ -71,6 +74,7 @@ export async function updateOffre(formData: FormData) {
       statut: 'actif',
       seuil,
       date_validite,
+      am_referent,
     })
     .eq('id', id)
 

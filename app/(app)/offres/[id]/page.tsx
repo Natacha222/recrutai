@@ -6,8 +6,10 @@ import {
   formatValidite,
   effectiveStatut,
   isExpired,
+  referentFromEmail,
   todayIso,
 } from '@/lib/format'
+import { getAvailableReferents } from '@/lib/referents'
 import CVUploader from './CVUploader'
 import CandidatureActions from './CandidatureActions'
 import DeleteAllCandidaturesButton from './DeleteAllCandidaturesButton'
@@ -42,17 +44,23 @@ export default async function OffreDetailPage({
   const { data: offre } = await supabase
     .from('offres')
     .select(
-      'id, titre, description, lieu, statut, contrat, seuil, date_validite, client_id, clients(nom, secteur)'
+      'id, titre, description, lieu, statut, contrat, seuil, date_validite, client_id, am_referent, clients(nom, secteur)'
     )
     .eq('id', id)
     .single()
 
   if (!offre) notFound()
 
-  const { data: clients } = await supabase
-    .from('clients')
-    .select('id, nom')
-    .order('nom')
+  // Liste des clients + utilisateur connecté + référents existants
+  // (union clients.am_referent ∪ offres.am_referent) pour alimenter le select
+  // référent. Le référent courant de l'offre est toujours inclus dans la liste
+  // même s'il n'est plus utilisé ailleurs.
+  const [{ data: clients }, userRes, availableReferents] = await Promise.all([
+    supabase.from('clients').select('id, nom').order('nom'),
+    supabase.auth.getUser(),
+    getAvailableReferents(supabase, [offre.am_referent]),
+  ])
+  const defaultReferent = referentFromEmail(userRes.data.user?.email)
 
   const { data: candidatures } = await supabase
     .from('candidatures')
@@ -100,6 +108,7 @@ export default async function OffreDetailPage({
           {offre.date_validite
             ? ` · Valide jusqu'au ${formatValidite(offre.date_validite)}`
             : ''}
+          {offre.am_referent ? ` · Référent ${offre.am_referent}` : ''}
         </div>
         <div className="flex items-center gap-3 flex-wrap mt-1">
           <h1 className="text-2xl font-bold">{offre.titre}</h1>
@@ -281,9 +290,12 @@ export default async function OffreDetailPage({
             seuil: offre.seuil,
             date_validite: offre.date_validite,
             client_id: offre.client_id,
+            am_referent: offre.am_referent,
           }}
           clients={clients ?? []}
           today={today}
+          defaultReferent={defaultReferent}
+          availableReferents={availableReferents}
         />
       </div>
     </div>

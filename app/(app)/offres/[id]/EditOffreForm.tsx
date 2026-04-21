@@ -18,16 +18,23 @@ type Offre = {
   seuil: number | null
   date_validite: string | null
   client_id: string | null
+  am_referent: string | null
 }
 
 export default function EditOffreForm({
   offre,
   clients,
   today,
+  defaultReferent,
+  availableReferents,
 }: {
   offre: Offre
   clients: Client[]
   today: string
+  /** Référent de l'utilisateur connecté, utilisé comme fallback d'affichage. */
+  defaultReferent: string | null
+  /** Liste des référents proposés dans le select. */
+  availableReferents: string[]
 }) {
   const [titre, setTitre] = useState(offre.titre ?? '')
   const [clientId, setClientId] = useState(offre.client_id ?? '')
@@ -40,6 +47,11 @@ export default function EditOffreForm({
   const [seuilStr, setSeuilStr] = useState<string>(String(offre.seuil ?? 60))
   const [dateValidite, setDateValidite] = useState(offre.date_validite ?? '')
   const [description, setDescription] = useState(offre.description ?? '')
+  // Référent : valeur existante si définie, sinon celle de l'utilisateur
+  // connecté pour pré-remplir lors de la première édition.
+  const [amReferent, setAmReferent] = useState<string>(
+    offre.am_referent ?? defaultReferent ?? ''
+  )
 
   // Validation seuil : entier dans [0, 100]. On garde la valeur en `string`
   // plutôt qu'en `number` pour pouvoir distinguer « champ vide » de « 0 ».
@@ -124,6 +136,29 @@ export default function EditOffreForm({
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>
+      </div>
+
+      <div>
+        <label
+          htmlFor="am_referent"
+          className="block text-sm font-medium text-brand-indigo-text mb-1"
+        >
+          Référent
+        </label>
+        <select
+          id="am_referent"
+          name="am_referent"
+          value={amReferent}
+          onChange={(e) => setAmReferent(e.target.value)}
+          className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+        >
+          <option value="">— Sans référent —</option>
+          {availableReferents.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

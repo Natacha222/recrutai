@@ -82,6 +82,26 @@ export function formatReferent(
 }
 
 /**
+ * Normalise un nom de client pour détecter les doublons :
+ * minuscules, sans accents, espaces compactés. Utilisée uniquement
+ * pour la comparaison — le nom affiché reste celui saisi.
+ *
+ * Exemples :
+ *   normalizeClientName('Danone')         -> 'danone'
+ *   normalizeClientName('  DANONE  ')     -> 'danone'
+ *   normalizeClientName('Crédit Agricole') -> 'credit agricole'
+ *   normalizeClientName('L Oréal')        -> 'l oreal'
+ */
+export function normalizeClientName(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+}
+
+/**
  * Déduit un référent au format canonique « F. NOM » depuis un email.
  * Règle : on prend la partie locale de l'email, on transforme les
  * séparateurs (. _ -) en espaces, puis on délègue à formatReferent.

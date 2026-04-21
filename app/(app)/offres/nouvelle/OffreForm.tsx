@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import Link from 'next/link'
+import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
 import {
   createOffre,
   extractOffreAction,
@@ -37,6 +38,9 @@ export default function OffreForm({
   const [seuil, setSeuil] = useState<number>(60)
   const [description, setDescription] = useState('')
   const [dateValidite, setDateValidite] = useState('')
+  // Par défaut, l'offre est attribuée au référent de l'utilisateur connecté.
+  // Il peut changer si l'offre est enregistrée pour un collègue.
+  const [amReferent, setAmReferent] = useState<string>(defaultReferent ?? '')
 
   // État de l'import PDF
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
@@ -257,6 +261,29 @@ export default function OffreForm({
               </button>
             </div>
           )}
+        </div>
+
+        <div>
+          <label
+            htmlFor="am_referent"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
+            Référent
+          </label>
+          <select
+            id="am_referent"
+            name="am_referent"
+            value={amReferent}
+            onChange={(e) => setAmReferent(e.target.value)}
+            className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
+          >
+            <option value="">— Sans référent —</option>
+            {availableReferents.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -481,14 +508,23 @@ function CreateClientModal({
         <h2 className="font-bold text-lg">Créer un nouveau client</h2>
 
         <div>
-          <label className="block text-sm font-medium text-brand-indigo-text mb-1">
+          <label
+            htmlFor="client-modal-nom"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
             Nom <span className="text-status-red">*</span>
           </label>
           <input
+            id="client-modal-nom"
             type="text"
             required
             value={nom}
-            onChange={(e) => setNom(e.target.value)}
+            onChange={(e) => {
+              setNom(e.target.value)
+              // On efface l'erreur dès que l'utilisateur change le nom : elle
+              // ne correspond plus forcément à l'état courant.
+              if (error) setError('')
+            }}
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>
@@ -552,11 +588,17 @@ function CreateClientModal({
           </select>
         </div>
 
-        {error && (
+        {error && error.startsWith('Un client nommé') ? (
+          <DuplicateClientErrorBanner
+            message={error}
+            onCancel={onClose}
+            nameInputId="client-modal-nom"
+          />
+        ) : error ? (
           <div className="px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
             {error}
           </div>
-        )}
+        ) : null}
 
         <div className="flex justify-end gap-3 pt-2">
           <button

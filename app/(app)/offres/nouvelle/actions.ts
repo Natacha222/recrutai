@@ -7,7 +7,7 @@ import {
   extractOffreFromPdfBuffer,
   type ExtractedOffre,
 } from '@/lib/offre-extraction'
-import { formatReferent, todayIso } from '@/lib/format'
+import { formatReferent, normalizeClientName, todayIso } from '@/lib/format'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
@@ -27,6 +27,9 @@ export async function createOffre(formData: FormData) {
   const date_validite = ISO_DATE_RE.test(dateValiditeRaw)
     ? dateValiditeRaw
     : null
+  const am_referent = formatReferent(
+    String(formData.get('am_referent') ?? '')
+  )
 
   if (!titre || !client_id || !lieu || !description || !date_validite) {
     return redirect(
@@ -61,6 +64,7 @@ export async function createOffre(formData: FormData) {
       contrat,
       seuil,
       date_validite,
+      am_referent,
     })
     .select('id')
     .single()
@@ -146,6 +150,23 @@ export async function createClientInlineAction(input: {
 
   const nom = input.nom.trim()
   if (!nom) return { ok: false, error: 'Le nom du client est obligatoire.' }
+
+  // Détection de doublon : même logique que createClientAction, mais on
+  // retourne l'erreur pour l'afficher dans la modale (pas de redirect).
+  const { data: existing } = await supabase.from('clients').select('nom')
+  const targetNorm = normalizeClientName(nom)
+  const duplicate = (existing ?? []).find(
+    (c) => normalizeClientName(c.nom ?? '') === targetNorm
+  )
+  if (duplicate) {
+    // Le préfixe « Un client nommé » est reconnu par la modale pour afficher
+    // la bannière à 2 choix (abandonner / modifier le nom). Les options
+    // détaillées sont fournies par la bannière, pas par ce message.
+    return {
+      ok: false,
+      error: `Un client nommé « ${duplicate.nom} » existe déjà.`,
+    }
+  }
 
   const secteur = input.secteur?.trim() || null
   const contact_email = input.contact_email?.trim() || null
