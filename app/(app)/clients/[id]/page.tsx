@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { updateClient } from './actions'
 import StatusBadge from '@/components/StatusBadge'
+import { effectiveStatut, formatValidite } from '@/lib/format'
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ error?: string }>
@@ -32,7 +33,7 @@ export default async function ClientDetailPage({
 
   const { data: offres } = await supabase
     .from('offres')
-    .select('id, titre, lieu, statut, created_at')
+    .select('id, titre, lieu, statut, date_validite, created_at')
     .eq('client_id', id)
     .order('created_at', { ascending: false })
 
@@ -149,7 +150,14 @@ export default async function ClientDetailPage({
               </Link>
               <div className="flex items-center gap-3 text-muted text-xs">
                 <span>{o.lieu ?? '—'}</span>
-                <StatusBadge status={o.statut ?? 'actif'} />
+                <span>
+                  {o.date_validite
+                    ? `Valide jusqu'au ${formatValidite(o.date_validite)}`
+                    : '—'}
+                </span>
+                <StatusBadge
+                  status={effectiveStatut(o.statut, o.date_validite)}
+                />
               </div>
             </li>
           ))}
