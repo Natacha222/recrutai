@@ -10,9 +10,21 @@ export const dynamic = 'force-dynamic'
 export default async function DashboardPage() {
   const supabase = await createClient()
 
+  // nbOffres : offres au statut 'actif' uniquement, pour coller au label.
+  // nbCandidatures : candidatures liées à une offre active, via inner
+  // join sur offres + filtre offres.statut. On filtre les deux pour
+  // que la moyenne "Candidatures / offre" soit cohérente — sinon on
+  // divise un numérateur "all-time toutes offres" par un dénominateur
+  // "offres actives", ce qui gonfle artificiellement le chiffre.
   const [{ count: nbOffres }, { count: nbCandidatures }] = await Promise.all([
-    supabase.from('offres').select('*', { count: 'exact', head: true }),
-    supabase.from('candidatures').select('*', { count: 'exact', head: true }),
+    supabase
+      .from('offres')
+      .select('*', { count: 'exact', head: true })
+      .eq('statut', 'actif'),
+    supabase
+      .from('candidatures')
+      .select('*, offres!inner(statut)', { count: 'exact', head: true })
+      .eq('offres.statut', 'actif'),
   ])
 
   const { count: nbQualifies } = await supabase
