@@ -57,7 +57,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Activité récente */}
-      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
+      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
         <div className="px-6 py-4 border-b border-border-soft">
           <h2 className="font-semibold">Activité récente</h2>
           <p className="text-sm text-muted mt-0.5">
@@ -83,7 +83,7 @@ export default async function DashboardPage() {
                 <tr key={c.id} className="text-sm">
                   <td className="px-6 py-4">
                     <div className="font-medium">{c.nom}</div>
-                    <div className="text-muted text-xs">{c.email}</div>
+                    <div className="text-muted text-sm">{c.email}</div>
                   </td>
                   <td className="px-6 py-4">
                     {offreInfo ? (

@@ -236,7 +236,7 @@ export default async function OffreDetailPage({
       />
 
       {/* Candidatures — filtrables via les KPIs ou les colonnes */}
-      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
+      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
         <div className="px-6 py-4 border-b border-border-soft flex items-center justify-between gap-3 flex-wrap">
           <h2 className="font-semibold">
             {hasCandFilter

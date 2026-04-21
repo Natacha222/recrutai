@@ -283,7 +283,7 @@ export default async function OffresPage({
         </Link>
       </div>
 
-      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
+      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
         <table className="w-full">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">

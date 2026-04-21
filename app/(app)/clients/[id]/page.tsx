@@ -167,14 +167,14 @@ export default async function ClientDetailPage({
       </form>
 
       {/* Offres associées */}
-      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
+      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
         <div className="px-6 py-4 border-b border-border-soft flex items-center justify-between gap-4">
           <h2 className="font-semibold">
             Offres associées ({offres?.length ?? 0})
           </h2>
           <Link
             href={`/offres/nouvelle?client_id=${client.id}`}
-            className="px-3 py-1.5 bg-brand-purple text-white rounded-md text-xs font-semibold hover:opacity-90 whitespace-nowrap"
+            className="px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90 whitespace-nowrap"
           >
             + Créer une offre d&apos;emploi
           </Link>
