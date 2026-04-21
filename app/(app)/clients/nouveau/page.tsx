@@ -51,7 +51,11 @@ export default async function NouveauClientPage({
           </select>
         </div>
 
-        <Field label="AM référent" name="am_referent" />
+        <Field
+          label="Référent"
+          name="am_referent"
+          placeholder="N. MAGNE (1re lettre du prénom, puis nom)"
+        />
 
         <div className="flex justify-end gap-3 pt-2">
           <Link
@@ -77,11 +81,13 @@ function Field({
   name,
   type = 'text',
   required = false,
+  placeholder,
 }: {
   label: string
   name: string
   type?: string
   required?: boolean
+  placeholder?: string
 }) {
   return (
     <div>
@@ -96,6 +102,7 @@ function Field({
         name={name}
         type={type}
         required={required}
+        placeholder={placeholder}
         className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
       />
     </div>

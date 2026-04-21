@@ -500,12 +500,13 @@ function CreateClientModal({
 
         <div>
           <label className="block text-sm font-medium text-brand-indigo-text mb-1">
-            AM référent
+            Référent
           </label>
           <input
             type="text"
             value={amReferent}
             onChange={(e) => setAmReferent(e.target.value)}
+            placeholder="N. MAGNE (1re lettre du prénom, puis nom)"
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>

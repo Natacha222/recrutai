@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState, useTransition } from 'react'
 
-const FILTER_FIELDS = ['q', 'formule', 'secteur', 'am']
+const FILTER_FIELDS = ['q', 'formule', 'secteur', 'am', 'offres']
 
 const CELL_INPUT_CLASS =
   'w-full px-2 py-1.5 border border-border-soft rounded-md text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-purple normal-case font-normal text-brand-indigo-text'
@@ -73,10 +73,13 @@ export function SelectFilter({
   field,
   placeholder,
   options,
+  labels,
 }: {
   field: string
   placeholder: string
   options: string[]
+  /** Optional mapping from option value to display label. */
+  labels?: Record<string, string>
 }) {
   const { urlValue, update } = useUrlFilter(field)
   return (
@@ -89,7 +92,7 @@ export function SelectFilter({
       <option value="">{placeholder}</option>
       {options.map((o) => (
         <option key={o} value={o}>
-          {o}
+          {labels?.[o] ?? o}
         </option>
       ))}
     </select>

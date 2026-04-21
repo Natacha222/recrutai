@@ -51,3 +51,32 @@ export function effectiveStatut(
   if (isExpired(dateValidite)) return 'clos'
   return 'actif'
 }
+
+/**
+ * Normalise un référent au format « F. NOM » :
+ *   - 1re lettre du prénom en majuscule, suivie d'un point et d'un espace
+ *   - Nom en majuscules
+ *
+ * Exemples :
+ *   formatReferent('Natacha Magne')  -> 'N. MAGNE'
+ *   formatReferent('N MAGNE')        -> 'N. MAGNE'
+ *   formatReferent('N. MAGNE')       -> 'N. MAGNE'
+ *   formatReferent('jean-pierre dupont') -> 'J. DUPONT'
+ *   formatReferent('  ')             -> null
+ *
+ * Si l'entrée ne contient qu'un seul mot, renvoie ce mot en majuscules
+ * (sans le point) — on ne sait pas si c'est un prénom ou un nom.
+ */
+export function formatReferent(
+  raw: string | null | undefined
+): string | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const parts = trimmed.split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return null
+  if (parts.length === 1) return parts[0].toUpperCase()
+  const firstLetter = parts[0].charAt(0).toUpperCase()
+  const lastName = parts.slice(1).join(' ').toUpperCase()
+  return `${firstLetter}. ${lastName}`
+}

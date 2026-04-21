@@ -70,9 +70,17 @@ type SearchParams = Promise<{
   formule?: string
   secteur?: string
   am?: string
+  offres?: string
   sort?: string
   dir?: string
 }>
+
+const OFFRES_FILTERS: { value: string; label: string }[] = [
+  { value: '0', label: 'Aucune' },
+  { value: '1', label: 'Au moins 1' },
+  { value: '5', label: 'Au moins 5' },
+  { value: '10', label: 'Au moins 10' },
+]
 
 export default async function ClientsPage({
   searchParams,
@@ -87,6 +95,7 @@ export default async function ClientsPage({
     formule = '',
     secteur = '',
     am = '',
+    offres = '',
   } = params
   const sort: SortKey = SORT_KEYS.includes(params.sort as SortKey)
     ? (params.sort as SortKey)
@@ -128,11 +137,21 @@ export default async function ClientsPage({
 
   // Filter
   const qLower = q.trim().toLowerCase()
+  const offresMin = OFFRES_FILTERS.some((o) => o.value === offres)
+    ? Number(offres)
+    : null
   const filtered = enriched.filter((c) => {
     if (qLower && !(c.nom ?? '').toLowerCase().includes(qLower)) return false
     if (formule && c.formule !== formule) return false
     if (secteur && c.secteur !== secteur) return false
     if (am && c.am_referent !== am) return false
+    if (offresMin !== null) {
+      if (offresMin === 0) {
+        if (c.offres_actives !== 0) return false
+      } else if (c.offres_actives < offresMin) {
+        return false
+      }
+    }
     return true
   })
 
@@ -173,7 +192,7 @@ export default async function ClientsPage({
 
   const total = sorted.length
   const totalAll = allClients.length
-  const hasFilter = !!(q || formule || secteur || am)
+  const hasFilter = !!(q || formule || secteur || am || offres)
   const subtitle = hasFilter
     ? `${total} résultat${total > 1 ? 's' : ''} sur ${totalAll}`
     : total > 1
@@ -187,6 +206,7 @@ export default async function ClientsPage({
     if (formule) sp.set('formule', formule)
     if (secteur) sp.set('secteur', secteur)
     if (am) sp.set('am', am)
+    if (offres) sp.set('offres', offres)
     if (key !== 'nom') sp.set('sort', key)
     if (newDir !== 'asc') sp.set('dir', newDir)
     const qs = sp.toString()
@@ -256,7 +276,7 @@ export default async function ClientsPage({
                 href={sortHref('offres_actives')}
               />
               <SortableHeader
-                label="AM référent"
+                label="Référent"
                 sortKey="am_referent"
                 sort={sort}
                 dir={dir}
@@ -281,7 +301,16 @@ export default async function ClientsPage({
                   placeholder="Tous"
                 />
               </th>
-              <th className="px-6 pt-0 pb-3"></th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <SelectFilter
+                  field="offres"
+                  options={OFFRES_FILTERS.map((o) => o.value)}
+                  labels={Object.fromEntries(
+                    OFFRES_FILTERS.map((o) => [o.value, o.label])
+                  )}
+                  placeholder="Toutes"
+                />
+              </th>
               <th className="px-6 pt-0 pb-3 font-normal normal-case">
                 <SelectFilter
                   field="am"

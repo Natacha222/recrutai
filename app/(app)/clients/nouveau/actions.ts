@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { formatReferent } from '@/lib/format'
 
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
 
@@ -15,8 +16,9 @@ export async function createClientAction(formData: FormData) {
     String(formData.get('contact_email') ?? '').trim() || null
   const formuleRaw = String(formData.get('formule') ?? '').trim()
   const formule = FORMULES.includes(formuleRaw) ? formuleRaw : 'Abonnement'
-  const am_referent =
-    String(formData.get('am_referent') ?? '').trim() || null
+  const am_referent = formatReferent(
+    String(formData.get('am_referent') ?? '')
+  )
 
   if (!nom) {
     return redirect('/clients/nouveau?error=Le+nom+est+obligatoire')

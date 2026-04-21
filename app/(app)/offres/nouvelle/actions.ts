@@ -7,7 +7,7 @@ import {
   extractOffreFromPdfBuffer,
   type ExtractedOffre,
 } from '@/lib/offre-extraction'
-import { todayIso } from '@/lib/format'
+import { formatReferent, todayIso } from '@/lib/format'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
@@ -142,7 +142,7 @@ export async function createClientInlineAction(input: {
   const secteur = input.secteur?.trim() || null
   const contact_email = input.contact_email?.trim() || null
   const formule = FORMULES.includes(input.formule) ? input.formule : 'Abonnement'
-  const am_referent = input.am_referent?.trim() || null
+  const am_referent = formatReferent(input.am_referent)
 
   const { data, error } = await supabase
     .from('clients')
