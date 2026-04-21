@@ -47,11 +47,25 @@ export async function requestPasswordReset(formData: FormData) {
     redirectTo,
   })
 
-  // En cas d'erreur technique (SMTP down, clé API invalide, etc.) on
-  // préfère redirigier sur la page avec un message — mais on reste vague
-  // pour ne pas révéler la nature de l'erreur à un attaquant.
+  // En cas d'erreur, on redirige avec un message adapté.
   if (error) {
-    console.error(`[requestPasswordReset] ${error.message}`)
+    console.error(
+      `[requestPasswordReset] ${error.status ?? ''} ${error.code ?? ''} ${error.message}`
+    )
+
+    // Rate limit Supabase : par sécurité, on ne peut pas redemander un
+    // email de reset pour la même adresse avant ~60s. On guide l'user
+    // explicitement au lieu d'un message générique d'erreur serveur.
+    const isRateLimit =
+      error.status === 429 ||
+      error.code === 'over_email_send_rate_limit' ||
+      /rate limit|too many requests/i.test(error.message)
+    if (isRateLimit) {
+      return redirect(
+        '/mot-de-passe-oublie?error=Trop+de+tentatives+rapproch%C3%A9es.+Merci+de+patienter+une+minute+avant+de+redemander+un+email%2C+ou+d%27utiliser+le+lien+pr%C3%A9c%C3%A9dent+s%27il+est+toujours+valable.'
+      )
+    }
+
     return redirect(
       '/mot-de-passe-oublie?error=Impossible+d%27envoyer+l%27email+pour+le+moment%2C+merci+de+r%C3%A9essayer+plus+tard'
     )
