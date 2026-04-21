@@ -108,14 +108,23 @@ export default function OffreForm({
     setShowClientModal(false)
   }
 
+  // Validation de la date : un message explicite s'affiche sous le champ
+  // si elle est dans le passé, pour que l'utilisateur comprenne pourquoi
+  // le bouton de sauvegarde est désactivé.
+  const dateFormatIsValid = /^\d{4}-\d{2}-\d{2}$/.test(dateValidite)
+  const dateInPast = dateFormatIsValid && dateValidite < today
+  const todayDisplay = today
+    ? `${today.slice(8, 10)}/${today.slice(5, 7)}/${today.slice(0, 4)}`
+    : ''
+
   const allFieldsFilled =
     titre.trim() !== '' &&
     clientId !== '' &&
     lieu.trim() !== '' &&
     description.trim() !== '' &&
     Number.isFinite(seuil) &&
-    /^\d{4}-\d{2}-\d{2}$/.test(dateValidite) &&
-    dateValidite >= today
+    dateFormatIsValid &&
+    !dateInPast
 
   return (
     <>
@@ -303,8 +312,23 @@ export default function OffreForm({
               min={today}
               value={dateValidite}
               onChange={(e) => setDateValidite(e.target.value)}
-              className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
+              aria-invalid={dateInPast}
+              aria-describedby={dateInPast ? 'date_validite_error' : undefined}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                dateInPast
+                  ? 'border-status-red focus:ring-status-red'
+                  : 'border-border-soft focus:ring-brand-purple'
+              }`}
             />
+            {dateInPast && (
+              <p
+                id="date_validite_error"
+                className="text-xs text-status-red mt-1"
+              >
+                La date de validité doit être postérieure ou égale à
+                aujourd&apos;hui ({todayDisplay}).
+              </p>
+            )}
           </div>
         </div>
 
