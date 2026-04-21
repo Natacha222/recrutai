@@ -205,9 +205,17 @@ export default async function DashboardPage() {
     .filter((s) => s.count > 0)
   const totalStatut = statutBreakdown.reduce((s, x) => s + x.count, 0)
 
+  // Moyenne de candidatures par offre : nb CV / nb offres, arrondie à
+  // 1 décimale et formatée avec virgule (norme française). Tombe sur
+  // '—' si aucune offre pour éviter une division par zéro.
+  const moyenneCandidaturesParOffre =
+    nbOffres && nbOffres > 0
+      ? ((nbCandidatures ?? 0) / nbOffres).toFixed(1).replace('.', ',')
+      : '—'
+
   const kpis = [
     { label: 'Offres actives', value: nbOffres ?? 0 },
-    { label: 'Candidatures reçues', value: nbCandidatures ?? 0 },
+    { label: 'Candidatures / offre', value: moyenneCandidaturesParOffre },
     { label: 'Candidats qualifiés', value: nbQualifies ?? 0 },
   ]
 
