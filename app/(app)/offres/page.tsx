@@ -1,40 +1,227 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
-import { formatValidite, effectiveStatut } from '@/lib/format'
+import { effectiveStatut, formatValidite } from '@/lib/format'
+import {
+  FiltersReset,
+  SelectFilter,
+  TextFilter,
+} from '@/components/TableFilters'
 
-export default async function OffresPage() {
+type SortKey =
+  | 'titre'
+  | 'client'
+  | 'contrat'
+  | 'statut'
+  | 'date_validite'
+  | 'candidatures'
+  | 'seuil'
+type SortDir = 'asc' | 'desc'
+
+const SORT_KEYS: SortKey[] = [
+  'titre',
+  'client',
+  'contrat',
+  'statut',
+  'date_validite',
+  'candidatures',
+  'seuil',
+]
+
+const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
+
+const STATUTS: { value: string; label: string }[] = [
+  { value: 'actif', label: 'Active' },
+  { value: 'clos', label: 'Clôturée' },
+]
+
+const FILTER_FIELDS = ['q', 'client', 'contrat', 'statut']
+
+function SortableHeader({
+  label,
+  sortKey,
+  sort,
+  dir,
+  href,
+  className = '',
+}: {
+  label: string
+  sortKey: SortKey
+  sort: SortKey
+  dir: SortDir
+  href: string
+  className?: string
+}) {
+  const active = sort === sortKey
+  const arrow = !active ? '↕' : dir === 'asc' ? '↑' : '↓'
+  return (
+    <th className={`px-6 pt-3 pb-2 ${className}`}>
+      <Link
+        href={href}
+        className={`inline-flex items-center gap-1 hover:text-brand-purple ${
+          active ? 'text-brand-purple' : ''
+        }`}
+      >
+        <span>{label}</span>
+        <span
+          className={`text-[10px] ${active ? 'opacity-100' : 'opacity-40'}`}
+          aria-hidden
+        >
+          {arrow}
+        </span>
+      </Link>
+    </th>
+  )
+}
+
+type SearchParams = Promise<{
+  q?: string
+  client?: string
+  contrat?: string
+  statut?: string
+  sort?: string
+  dir?: string
+}>
+
+export default async function OffresPage({
+  searchParams,
+}: {
+  searchParams: SearchParams
+}) {
+  const params = await searchParams
+  const {
+    q = '',
+    client = '',
+    contrat = '',
+    statut = '',
+  } = params
+  const sort: SortKey = SORT_KEYS.includes(params.sort as SortKey)
+    ? (params.sort as SortKey)
+    : 'titre'
+  const dir: SortDir = params.dir === 'desc' ? 'desc' : 'asc'
+
   const supabase = await createClient()
-
   const { data: offres } = await supabase
     .from('offres')
     .select(
       'id, titre, lieu, statut, contrat, seuil, created_at, date_validite, clients(nom), candidatures(id, statut)'
     )
-    .order('created_at', { ascending: false })
 
-  // Statut effectif = DB + règle d'expiration (cf. lib/format)
-  const offresActives =
-    offres?.filter(
-      (o) => effectiveStatut(o.statut, o.date_validite) === 'actif'
-    ) ?? []
-  const offresClos =
-    offres?.filter(
-      (o) => effectiveStatut(o.statut, o.date_validite) === 'clos'
-    ) ?? []
+  const allOffres = (offres ?? []).map((o) => {
+    const clientNom = Array.isArray(o.clients)
+      ? (o.clients[0]?.nom ?? null)
+      : ((o.clients as { nom: string } | null)?.nom ?? null)
+    const effective = effectiveStatut(o.statut, o.date_validite)
+    const total = (o.candidatures ?? []).length
+    const qualifies = (o.candidatures ?? []).filter(
+      (c) => c.statut === 'qualifié'
+    ).length
+    return {
+      ...o,
+      clientNom,
+      effective,
+      total,
+      qualifies,
+    }
+  })
+
+  // Distinct client names for the filter dropdown
+  const clientsList = Array.from(
+    new Set(
+      allOffres
+        .map((o) => o.clientNom)
+        .filter((n): n is string => !!n && n.trim() !== '')
+    )
+  ).sort((a, b) => a.localeCompare(b, 'fr'))
+
+  // Filter
+  const qLower = q.trim().toLowerCase()
+  const filtered = allOffres.filter((o) => {
+    if (qLower && !(o.titre ?? '').toLowerCase().includes(qLower)) return false
+    if (client && o.clientNom !== client) return false
+    if (contrat && o.contrat !== contrat) return false
+    if (statut && o.effective !== statut) return false
+    return true
+  })
+
+  // Sort
+  const sorted = [...filtered].sort((a, b) => {
+    let av: string | number
+    let bv: string | number
+    switch (sort) {
+      case 'client':
+        av = (a.clientNom ?? '').toLowerCase()
+        bv = (b.clientNom ?? '').toLowerCase()
+        break
+      case 'contrat':
+        av = (a.contrat ?? '').toLowerCase()
+        bv = (b.contrat ?? '').toLowerCase()
+        break
+      case 'statut':
+        av = a.effective
+        bv = b.effective
+        break
+      case 'date_validite':
+        av = a.date_validite ?? ''
+        bv = b.date_validite ?? ''
+        break
+      case 'candidatures':
+        av = a.total
+        bv = b.total
+        break
+      case 'seuil':
+        av = a.seuil ?? 0
+        bv = b.seuil ?? 0
+        break
+      case 'titre':
+      default:
+        av = (a.titre ?? '').toLowerCase()
+        bv = (b.titre ?? '').toLowerCase()
+    }
+    if (typeof av === 'string' && typeof bv === 'string') {
+      const cmp = av.localeCompare(bv, 'fr')
+      return dir === 'asc' ? cmp : -cmp
+    }
+    const na = av as number
+    const nb = bv as number
+    return dir === 'asc' ? na - nb : nb - na
+  })
+
+  const totalAll = allOffres.length
+  const offresActives = allOffres.filter((o) => o.effective === 'actif').length
+  const offresClos = allOffres.filter((o) => o.effective === 'clos').length
+  const hasFilter = !!(q || client || contrat || statut)
+  const totalShown = sorted.length
+  const subtitle = hasFilter
+    ? `${totalShown} résultat${totalShown > 1 ? 's' : ''} sur ${totalAll}`
+    : `${offresActives} offre${offresActives > 1 ? 's' : ''} active${
+        offresActives > 1 ? 's' : ''
+      } · ${offresClos} offre${offresClos > 1 ? 's' : ''} clôturée${
+        offresClos > 1 ? 's' : ''
+      }`
+
+  function sortHref(key: SortKey) {
+    const newDir: SortDir = sort === key && dir === 'asc' ? 'desc' : 'asc'
+    const sp = new URLSearchParams()
+    if (q) sp.set('q', q)
+    if (client) sp.set('client', client)
+    if (contrat) sp.set('contrat', contrat)
+    if (statut) sp.set('statut', statut)
+    if (key !== 'titre') sp.set('sort', key)
+    if (newDir !== 'asc') sp.set('dir', newDir)
+    const qs = sp.toString()
+    return qs ? `/offres?${qs}` : '/offres'
+  }
 
   return (
     <div>
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Offres d&apos;emploi</h1>
-          <p className="text-sm text-muted mt-1">
-            {offresActives.length} offre
-            {offresActives.length > 1 ? 's' : ''} active
-            {offresActives.length > 1 ? 's' : ''} · {offresClos.length} offre
-            {offresClos.length > 1 ? 's' : ''} clôturée
-            {offresClos.length > 1 ? 's' : ''}
-          </p>
+          <div className="text-sm text-muted mt-1 flex items-center gap-3">
+            <span>{subtitle}</span>
+            <FiltersReset fields={FILTER_FIELDS} />
+          </div>
         </div>
         <Link
           href="/offres/nouvelle"
@@ -48,74 +235,146 @@ export default async function OffresPage() {
         <table className="w-full">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <th className="px-6 py-3">Intitulé</th>
-              <th className="px-6 py-3">Client</th>
-              <th className="px-6 py-3">Contrat</th>
-              <th className="px-6 py-3">Statut</th>
-              <th className="px-6 py-3">Valide jusqu&apos;au</th>
-              <th className="px-6 py-3">CV reçus / Qualifiés</th>
-              <th className="px-6 py-3">Seuil</th>
-              <th className="px-6 py-3">Action</th>
+              <SortableHeader
+                label="Intitulé"
+                sortKey="titre"
+                sort={sort}
+                dir={dir}
+                href={sortHref('titre')}
+              />
+              <SortableHeader
+                label="Client"
+                sortKey="client"
+                sort={sort}
+                dir={dir}
+                href={sortHref('client')}
+              />
+              <SortableHeader
+                label="Contrat"
+                sortKey="contrat"
+                sort={sort}
+                dir={dir}
+                href={sortHref('contrat')}
+              />
+              <SortableHeader
+                label="Statut"
+                sortKey="statut"
+                sort={sort}
+                dir={dir}
+                href={sortHref('statut')}
+              />
+              <SortableHeader
+                label="Valide jusqu'au"
+                sortKey="date_validite"
+                sort={sort}
+                dir={dir}
+                href={sortHref('date_validite')}
+              />
+              <SortableHeader
+                label="CV reçus / Qualifiés"
+                sortKey="candidatures"
+                sort={sort}
+                dir={dir}
+                href={sortHref('candidatures')}
+              />
+              <SortableHeader
+                label="Seuil"
+                sortKey="seuil"
+                sort={sort}
+                dir={dir}
+                href={sortHref('seuil')}
+              />
+              <th className="px-6 pt-3 pb-2">Action</th>
+            </tr>
+            <tr className="align-top">
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <TextFilter field="q" placeholder="Intitulé…" />
+              </th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <SelectFilter
+                  field="client"
+                  options={clientsList}
+                  placeholder="Tous"
+                />
+              </th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <SelectFilter
+                  field="contrat"
+                  options={CONTRATS}
+                  placeholder="Tous"
+                />
+              </th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <SelectFilter
+                  field="statut"
+                  options={STATUTS.map((s) => s.value)}
+                  labels={Object.fromEntries(
+                    STATUTS.map((s) => [s.value, s.label])
+                  )}
+                  placeholder="Tous"
+                />
+              </th>
+              <th className="px-6 pt-0 pb-3"></th>
+              <th className="px-6 pt-0 pb-3"></th>
+              <th className="px-6 pt-0 pb-3"></th>
+              <th className="px-6 pt-0 pb-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-soft">
-            {offres?.map((o) => {
-              const total = o.candidatures?.length ?? 0
-              const qualifies =
-                o.candidatures?.filter((c) => c.statut === 'qualifié').length ??
-                0
-              const clientNom = Array.isArray(o.clients)
-                ? o.clients[0]?.nom
-                : (o.clients as { nom: string } | null)?.nom
-              return (
-                <tr key={o.id} className="text-sm hover:bg-surface transition align-top">
-                  <td className="px-6 py-5">
-                    <Link
-                      href={`/offres/${o.id}`}
-                      className="font-semibold text-brand-indigo-text hover:text-brand-purple"
-                    >
-                      {o.titre}
-                    </Link>
-                    {o.lieu && (
-                      <div className="text-xs text-muted mt-1 flex items-center gap-1">
-                        <span>📍</span>
-                        <span>{o.lieu}</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-5 text-muted">{clientNom ?? '—'}</td>
-                  <td className="px-6 py-5 text-muted">{o.contrat ?? '—'}</td>
-                  <td className="px-6 py-5">
-                    <StatusBadge
-                      status={effectiveStatut(o.statut, o.date_validite)}
-                    />
-                  </td>
-                  <td className="px-6 py-5 text-muted">
-                    {formatValidite(o.date_validite)}
-                  </td>
-                  <td className="px-6 py-5 font-semibold">
-                    {total} · {qualifies}
-                  </td>
-                  <td className="px-6 py-5">
-                    <span className="font-bold text-brand-purple">
-                      {o.seuil}
-                    </span>
-                  </td>
-                  <td className="px-6 py-5">
-                    <Link
-                      href={`/offres/${o.id}`}
-                      className="text-brand-purple text-sm font-medium hover:underline"
-                    >
-                      Voir →
-                    </Link>
-                  </td>
-                </tr>
-              )
-            })}
-            {(!offres || offres.length === 0) && (
+            {sorted.map((o) => (
+              <tr
+                key={o.id}
+                className="text-sm hover:bg-surface transition align-top"
+              >
+                <td className="px-6 py-5">
+                  <Link
+                    href={`/offres/${o.id}`}
+                    className="font-semibold text-brand-indigo-text hover:text-brand-purple"
+                  >
+                    {o.titre}
+                  </Link>
+                  {o.lieu && (
+                    <div className="text-xs text-muted mt-1 flex items-center gap-1">
+                      <span>📍</span>
+                      <span>{o.lieu}</span>
+                    </div>
+                  )}
+                </td>
+                <td className="px-6 py-5 text-muted">{o.clientNom ?? '—'}</td>
+                <td className="px-6 py-5 text-muted">{o.contrat ?? '—'}</td>
+                <td className="px-6 py-5">
+                  <StatusBadge status={o.effective} />
+                </td>
+                <td className="px-6 py-5 text-muted tabular-nums">
+                  {formatValidite(o.date_validite)}
+                </td>
+                <td className="px-6 py-5 font-semibold tabular-nums">
+                  {o.total} · {o.qualifies}
+                </td>
+                <td className="px-6 py-5">
+                  <span className="font-bold text-brand-purple">
+                    {o.seuil}
+                  </span>
+                </td>
+                <td className="px-6 py-5">
+                  <Link
+                    href={`/offres/${o.id}`}
+                    className="text-brand-purple text-sm font-medium hover:underline"
+                  >
+                    Voir →
+                  </Link>
+                </td>
+              </tr>
+            ))}
+            {sorted.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-muted">
-                  Aucune offre pour le moment.
+                <td
+                  colSpan={8}
+                  className="px-6 py-8 text-center text-muted text-sm"
+                >
+                  {hasFilter
+                    ? 'Aucune offre ne correspond à ces filtres.'
+                    : 'Aucune offre pour le moment.'}
                 </td>
               </tr>
             )}

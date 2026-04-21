@@ -3,8 +3,6 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState, useTransition } from 'react'
 
-const FILTER_FIELDS = ['q', 'formule', 'secteur', 'am', 'offres']
-
 const CELL_INPUT_CLASS =
   'w-full px-2 py-1.5 border border-border-soft rounded-md text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-purple normal-case font-normal text-brand-indigo-text'
 
@@ -99,13 +97,13 @@ export function SelectFilter({
   )
 }
 
-export function FiltersReset() {
+export function FiltersReset({ fields }: { fields: string[] }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
-  const hasFilter = FILTER_FIELDS.some((f) => {
+  const hasFilter = fields.some((f) => {
     const v = searchParams.get(f)
     return !!v && v !== ''
   })
@@ -116,7 +114,7 @@ export function FiltersReset() {
       type="button"
       onClick={() => {
         const sp = new URLSearchParams(searchParams.toString())
-        for (const f of FILTER_FIELDS) sp.delete(f)
+        for (const f of fields) sp.delete(f)
         const qs = sp.toString()
         startTransition(() => {
           router.replace(qs ? `${pathname}?${qs}` : pathname)

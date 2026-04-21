@@ -6,7 +6,9 @@ import {
   FiltersReset,
   SelectFilter,
   TextFilter,
-} from './ClientsFilters'
+} from '@/components/TableFilters'
+
+const FILTER_FIELDS = ['q', 'formule', 'secteur', 'am', 'offres']
 
 type SortKey =
   | 'nom'
@@ -220,7 +222,7 @@ export default async function ClientsPage({
           <h1 className="text-2xl font-bold">Clients</h1>
           <div className="text-sm text-muted mt-1 flex items-center gap-3">
             <span>{subtitle}</span>
-            <FiltersReset />
+            <FiltersReset fields={FILTER_FIELDS} />
           </div>
         </div>
         <Link
