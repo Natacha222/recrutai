@@ -1,152 +1,127 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState, useTransition } from 'react'
 
-const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
+const FILTER_FIELDS = ['q', 'formule', 'secteur', 'am']
 
-type Props = {
-  q: string
-  formule: string
-  secteur: string
-  am: string
-  sort: string
-  dir: string
-  secteurs: string[]
-  amReferents: string[]
+const CELL_INPUT_CLASS =
+  'w-full px-2 py-1.5 border border-border-soft rounded-md text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-purple normal-case font-normal text-brand-indigo-text'
+
+function useUrlFilter(field: string) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const urlValue = searchParams.get(field) ?? ''
+  const [, startTransition] = useTransition()
+
+  function update(newValue: string) {
+    const sp = new URLSearchParams(searchParams.toString())
+    if (newValue) sp.set(field, newValue)
+    else sp.delete(field)
+    const qs = sp.toString()
+    startTransition(() => {
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    })
+  }
+
+  return { urlValue, update }
 }
 
-export default function ClientsFilters(props: Props) {
-  const router = useRouter()
-  const [isPending, startTransition] = useTransition()
-  const [localQ, setLocalQ] = useState(props.q)
-  const [prevPropQ, setPrevPropQ] = useState(props.q)
-
-  // Derived state sync: when props.q changes externally (URL navigation or
-  // reset), update the local input value. This is the React-recommended
-  // pattern for syncing state with props during render.
-  if (props.q !== prevPropQ) {
-    setPrevPropQ(props.q)
-    setLocalQ(props.q)
-  }
-
-  function buildUrl(updates: Partial<Props>, overrideQ?: string) {
-    const merged = {
-      q: overrideQ !== undefined ? overrideQ : props.q,
-      formule:
-        updates.formule !== undefined ? updates.formule : props.formule,
-      secteur:
-        updates.secteur !== undefined ? updates.secteur : props.secteur,
-      am: updates.am !== undefined ? updates.am : props.am,
-      sort: props.sort,
-      dir: props.dir,
-    }
-    const sp = new URLSearchParams()
-    if (merged.q) sp.set('q', merged.q)
-    if (merged.formule) sp.set('formule', merged.formule)
-    if (merged.secteur) sp.set('secteur', merged.secteur)
-    if (merged.am) sp.set('am', merged.am)
-    if (merged.sort && merged.sort !== 'nom') sp.set('sort', merged.sort)
-    if (merged.dir && merged.dir !== 'asc') sp.set('dir', merged.dir)
-    const qs = sp.toString()
-    return qs ? `/clients?${qs}` : '/clients'
-  }
-
+export function TextFilter({
+  field,
+  placeholder,
+}: {
+  field: string
+  placeholder: string
+}) {
+  const { urlValue, update } = useUrlFilter(field)
+  const [value, setValue] = useState(urlValue)
+  const [prevUrlValue, setPrevUrlValue] = useState(urlValue)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function handleQChange(value: string) {
-    setLocalQ(value)
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      startTransition(() => {
-        router.replace(buildUrl({}, value))
-      })
-    }, 300)
+  // Sync with URL changes (reset button, back/forward navigation)
+  if (urlValue !== prevUrlValue) {
+    setPrevUrlValue(urlValue)
+    setValue(urlValue)
   }
 
-  // Clear any pending timer on unmount
+  function handleChange(newValue: string) {
+    setValue(newValue)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => update(newValue), 300)
+  }
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
 
-  function update(updates: Partial<Props>) {
-    startTransition(() => {
-      router.replace(buildUrl(updates))
-    })
-  }
+  return (
+    <input
+      type="search"
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => handleChange(e.target.value)}
+      className={CELL_INPUT_CLASS}
+    />
+  )
+}
 
-  const hasFilter = !!(props.q || props.formule || props.secteur || props.am)
+export function SelectFilter({
+  field,
+  placeholder,
+  options,
+}: {
+  field: string
+  placeholder: string
+  options: string[]
+}) {
+  const { urlValue, update } = useUrlFilter(field)
+  return (
+    <select
+      value={urlValue}
+      onChange={(e) => update(e.target.value)}
+      disabled={options.length === 0}
+      className={CELL_INPUT_CLASS}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
+  )
+}
 
-  const selectClass =
-    'px-3 py-2 border border-border-soft rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple'
+export function FiltersReset() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [, startTransition] = useTransition()
+
+  const hasFilter = FILTER_FIELDS.some((f) => {
+    const v = searchParams.get(f)
+    return !!v && v !== ''
+  })
+  if (!hasFilter) return null
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3">
-      <input
-        type="search"
-        placeholder="Rechercher une entreprise…"
-        value={localQ}
-        onChange={(e) => handleQChange(e.target.value)}
-        className="px-3 py-2 border border-border-soft rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple min-w-[220px]"
-      />
-
-      <select
-        value={props.formule}
-        onChange={(e) => update({ formule: e.target.value })}
-        className={selectClass}
-      >
-        <option value="">Toutes formules</option>
-        {FORMULES.map((f) => (
-          <option key={f} value={f}>
-            {f}
-          </option>
-        ))}
-      </select>
-
-      <select
-        value={props.secteur}
-        onChange={(e) => update({ secteur: e.target.value })}
-        className={selectClass}
-        disabled={props.secteurs.length === 0}
-      >
-        <option value="">Tous secteurs</option>
-        {props.secteurs.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
-
-      <select
-        value={props.am}
-        onChange={(e) => update({ am: e.target.value })}
-        className={selectClass}
-        disabled={props.amReferents.length === 0}
-      >
-        <option value="">Tous AM</option>
-        {props.amReferents.map((a) => (
-          <option key={a} value={a}>
-            {a}
-          </option>
-        ))}
-      </select>
-
-      {hasFilter && (
-        <button
-          type="button"
-          onClick={() => {
-            if (timerRef.current) clearTimeout(timerRef.current)
-            startTransition(() => router.replace('/clients'))
-          }}
-          className="text-sm text-brand-purple hover:underline"
-        >
-          Réinitialiser
-        </button>
-      )}
-
-      {isPending && <span className="text-xs text-muted">…</span>}
-    </div>
+    <button
+      type="button"
+      onClick={() => {
+        const sp = new URLSearchParams(searchParams.toString())
+        for (const f of FILTER_FIELDS) sp.delete(f)
+        const qs = sp.toString()
+        startTransition(() => {
+          router.replace(qs ? `${pathname}?${qs}` : pathname)
+        })
+      }}
+      className="text-xs text-brand-purple hover:underline"
+    >
+      Réinitialiser les filtres
+    </button>
   )
 }

@@ -2,7 +2,11 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import FormuleBadge from '@/components/FormuleBadge'
 import ClickableRow from '@/components/ClickableRow'
-import ClientsFilters from './ClientsFilters'
+import {
+  FiltersReset,
+  SelectFilter,
+  TextFilter,
+} from './ClientsFilters'
 
 type SortKey =
   | 'nom'
@@ -19,6 +23,8 @@ const SORT_KEYS: SortKey[] = [
   'offres_actives',
   'am_referent',
 ]
+
+const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
 
 function SortableHeader({
   label,
@@ -38,7 +44,7 @@ function SortableHeader({
   const active = sort === sortKey
   const arrow = !active ? '↕' : dir === 'asc' ? '↑' : '↓'
   return (
-    <th className={`px-6 py-3 ${className}`}>
+    <th className={`px-6 pt-3 pb-2 ${className}`}>
       <Link
         href={href}
         className={`inline-flex items-center gap-1 hover:text-brand-purple ${
@@ -192,7 +198,10 @@ export default async function ClientsPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Clients</h1>
-          <p className="text-sm text-muted mt-1">{subtitle}</p>
+          <div className="text-sm text-muted mt-1 flex items-center gap-3">
+            <span>{subtitle}</span>
+            <FiltersReset />
+          </div>
         </div>
         <Link
           href="/clients/nouveau"
@@ -213,17 +222,6 @@ export default async function ClientsPage({
           {error}
         </div>
       )}
-
-      <ClientsFilters
-        q={q}
-        formule={formule}
-        secteur={secteur}
-        am={am}
-        sort={sort}
-        dir={dir}
-        secteurs={secteurs}
-        amReferents={amReferents}
-      />
 
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-hidden">
         <table className="w-full">
@@ -264,6 +262,33 @@ export default async function ClientsPage({
                 dir={dir}
                 href={sortHref('am_referent')}
               />
+            </tr>
+            <tr className="align-top">
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <TextFilter field="q" placeholder="Nom d'entreprise…" />
+              </th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <SelectFilter
+                  field="formule"
+                  options={FORMULES}
+                  placeholder="Toutes"
+                />
+              </th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <SelectFilter
+                  field="secteur"
+                  options={secteurs}
+                  placeholder="Tous"
+                />
+              </th>
+              <th className="px-6 pt-0 pb-3"></th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <SelectFilter
+                  field="am"
+                  options={amReferents}
+                  placeholder="Tous"
+                />
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-soft">
