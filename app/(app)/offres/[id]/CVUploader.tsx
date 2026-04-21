@@ -16,6 +16,11 @@ const UPLOAD_SEC_PER_FILE = 2
 const SCORING_BASE_SEC = 18
 const SCORING_EXTRA_SEC_PER_FILE = 2.5
 
+// Durée d'affichage (en ms) du temps total réel après la fin de
+// l'ingestion. L'utilisateur le voit brièvement à titre indicatif puis
+// il disparaît pour ne pas encombrer l'UI.
+const FINAL_DURATION_DISPLAY_MS = 10_000
+
 function estimateUploadSec(nFiles: number): number {
   return nFiles * UPLOAD_SEC_PER_FILE
 }
@@ -50,6 +55,10 @@ export default function CVUploader({
   // (upload ou scoring). Remis à 0 à chaque changement de phase.
   const [elapsedSec, setElapsedSec] = useState(0)
   const phaseStartRef = useRef<number>(0)
+  // Temps total réel (upload + scoring) affiché brièvement en fin
+  // d'ingestion, null le reste du temps.
+  const [finalDurationSec, setFinalDurationSec] = useState<number | null>(null)
+  const totalStartRef = useRef<number>(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Incrémente elapsedSec toutes les 250ms pendant les phases actives.
@@ -62,6 +71,17 @@ export default function CVUploader({
     const id = setInterval(tick, 250)
     return () => clearInterval(id)
   }, [status])
+
+  // Efface le temps total après un court délai pour ne rester qu'à
+  // titre indicatif (le reste du message de succès/erreur persiste).
+  useEffect(() => {
+    if (finalDurationSec === null) return
+    const id = setTimeout(
+      () => setFinalDurationSec(null),
+      FINAL_DURATION_DISPLAY_MS
+    )
+    return () => clearTimeout(id)
+  }, [finalDurationSec])
 
   async function handleFiles(files: FileList | null) {
     if (disabled) return
@@ -79,8 +99,11 @@ export default function CVUploader({
     }
 
     const supabase = createClient()
-    phaseStartRef.current = Date.now()
+    const startedAt = Date.now()
+    totalStartRef.current = startedAt
+    phaseStartRef.current = startedAt
     setElapsedSec(0)
+    setFinalDurationSec(null)
     setStatus('uploading')
     setMessage('')
     setProgress({ current: 0, total: pdfFiles.length })
@@ -134,6 +157,8 @@ export default function CVUploader({
       }
       if (n.skippedReason) parts.push(n.skippedReason)
 
+      const totalSec = (Date.now() - totalStartRef.current) / 1000
+      setFinalDurationSec(totalSec)
       setStatus(n.errors.length > 0 ? 'error' : 'done')
       setMessage(parts.join(' '))
       if (inputRef.current) inputRef.current.value = ''
@@ -237,12 +262,22 @@ export default function CVUploader({
 
       {status === 'done' && message && (
         <div className="mt-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
-          {message}
+          <div>{message}</div>
+          {finalDurationSec !== null && (
+            <div className="mt-1 text-xs opacity-80">
+              Temps total : {formatSec(finalDurationSec)}
+            </div>
+          )}
         </div>
       )}
       {status === 'error' && message && (
         <div className="mt-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
-          {message}
+          <div>{message}</div>
+          {finalDurationSec !== null && (
+            <div className="mt-1 text-xs opacity-80">
+              Temps total : {formatSec(finalDurationSec)}
+            </div>
+          )}
         </div>
       )}
     </div>
