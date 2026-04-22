@@ -13,18 +13,18 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="w-60 shrink-0 bg-brand-indigo text-brand-indigo-light sticky top-0 h-screen flex flex-col">
-      <div className="px-6 py-6 text-white font-bold text-lg tracking-wide">
+    <aside className="w-44 shrink-0 bg-brand-indigo text-brand-indigo-light sticky top-0 h-screen flex flex-col">
+      <div className="px-4 py-6 text-white font-bold text-lg tracking-wide">
         RecrutAI
       </div>
-      <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-2 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const active = pathname.startsWith(item.href)
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-2.5 py-2 rounded-md text-sm font-medium transition-colors ${
                 active
                   ? 'bg-white/10 text-white'
                   : 'hover:bg-white/5 hover:text-white'

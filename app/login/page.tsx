@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import { login } from './actions'
 
@@ -37,6 +38,14 @@ export default async function LoginPage({
       {/* Formulaire */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
+          <Image
+            src="/logo.png"
+            alt="RecrutAI"
+            width={200}
+            height={200}
+            priority
+            className="h-24 w-auto mb-4"
+          />
           <h2 className="text-2xl font-bold text-brand-indigo-text mb-2">
             Connexion
           </h2>
