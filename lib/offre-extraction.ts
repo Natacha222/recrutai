@@ -9,6 +9,9 @@ export type ExtractedOffre = {
   /** Date limite / deadline si mentionnée dans le PDF, au format YYYY-MM-DD.
    *  Chaîne vide si l'information n'est pas disponible. */
   date_validite: string
+  /** Référence / code de l'offre attribué par le client (ex : "TECH-2026-018",
+   *  "Réf. : ABC123"). Chaîne vide si non mentionné. */
+  reference: string
 }
 
 /**
@@ -76,6 +79,11 @@ export async function extractOffreFromPdfBuffer(
                 description:
                   'Date limite de candidature au format YYYY-MM-DD si le document en mentionne une (ex : « candidatures avant le 30/06/2026 », « deadline », « date limite »). Chaîne vide si rien n\'est indiqué — ne devine pas.',
               },
+              reference: {
+                type: 'string',
+                description:
+                  "Référence / code de l'offre tel qu'indiqué dans le document (ex : « Réf. : TECH-2026-018 », « Référence : ABC123 », « Ref. offre n° XYZ »). Recopie la valeur exacte, sans le préfixe « Réf. : ». Chaîne vide si aucune référence n'est mentionnée — ne devine pas.",
+              },
             },
             required: [
               'titre',
@@ -84,6 +92,7 @@ export async function extractOffreFromPdfBuffer(
               'contrat',
               'description',
               'date_validite',
+              'reference',
             ],
           },
         },
@@ -124,11 +133,19 @@ export async function extractOffreFromPdfBuffer(
       ? raw.date_validite
       : ''
 
+    // Nettoie la référence : retire un éventuel préfixe « Réf. : » ou « Ref. »
+    // que l'IA aurait laissé malgré la consigne, et trim les espaces. On garde
+    // la casse d'origine (certaines refs sont sensibles à la casse côté ATS).
+    const referenceClean = (raw.reference ?? '')
+      .replace(/^\s*(?:réf(?:érence)?\.?|ref\.?)\s*[:.]?\s*/i, '')
+      .trim()
+
     return {
       ok: true,
       data: {
         ...raw,
         date_validite: dateClean,
+        reference: referenceClean,
       },
     }
   } catch (e) {

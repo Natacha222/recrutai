@@ -26,7 +26,9 @@ export async function sendQualifiedCandidateEmail({
   cvFilename,
 }: {
   to: string
-  offreReference: string
+  /** Référence client (ex : "TECH-2026-018"). null si l'offre n'en a pas :
+   *  dans ce cas, le sujet n'inclut pas le préfixe `[…]`. */
+  offreReference: string | null
   offreTitle: string
   candidateName: string
   candidateEmail: string
@@ -44,7 +46,9 @@ export async function sendQualifiedCandidateEmail({
   const resend = new Resend(apiKey)
   const from = process.env.RESEND_FROM ?? 'RecrutAI <onboarding@resend.dev>'
 
-  const subject = `[${offreReference}] ${offreTitle} - nouveau CV qualifié`
+  const subject = offreReference
+    ? `[${offreReference}] ${offreTitle} - nouveau CV qualifié`
+    : `${offreTitle} - nouveau CV qualifié`
 
   const displayName = candidateName?.trim() || 'Un nouveau candidat'
   const hasRealEmail =

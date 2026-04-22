@@ -51,10 +51,15 @@ export default async function ModifierOffrePage({
         </Link>
         <h1 className="text-2xl font-bold mt-2">Modifier l&apos;offre</h1>
         <p className="text-sm text-muted mt-1">
-          <span className="font-mono font-semibold text-brand-purple">
-            {offre.reference}
-          </span>
-          {offre.titre ? ` · ${offre.titre}` : ''}
+          {offre.reference && (
+            <>
+              <span className="font-mono font-semibold text-brand-purple">
+                Réf. {offre.reference}
+              </span>
+              {offre.titre ? ' · ' : ''}
+            </>
+          )}
+          {offre.titre}
         </p>
       </div>
 

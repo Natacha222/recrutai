@@ -31,6 +31,7 @@ export default function OffreForm({
   const [clients, setClients] = useState<Client[]>(initialClients)
 
   // Champs du formulaire (contrôlés pour pouvoir les pré-remplir depuis le PDF)
+  const [reference, setReference] = useState('')
   const [titre, setTitre] = useState('')
   const [clientId, setClientId] = useState(initialClientId)
   const [lieu, setLieu] = useState('')
@@ -85,6 +86,7 @@ export default function OffreForm({
     setLieu(result.data.lieu)
     setContrat(result.data.contrat)
     setDescription(result.data.description)
+    setReference(result.data.reference)
     // On n'accepte une date extraite que si elle est dans le futur, sinon
     // l'utilisateur serait bloqué au moment de valider.
     if (result.data.date_validite && result.data.date_validite >= today) {
@@ -202,13 +204,16 @@ export default function OffreForm({
           </label>
           <input
             id="reference"
+            name="reference"
             type="text"
-            readOnly
-            value="Générée automatiquement (OFF-XXXX)"
-            className="w-full px-3 py-2 border border-border-soft rounded-md bg-surface text-muted italic cursor-not-allowed"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder="Ex : TECH-2026-018"
+            className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
           <p className="text-xs text-muted mt-1">
-            Attribuée automatiquement après enregistrement.
+            Référence attribuée par le client, optionnelle. Extraite
+            automatiquement du PDF si présente.
           </p>
         </div>
 

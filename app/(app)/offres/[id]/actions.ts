@@ -29,6 +29,8 @@ export async function updateOffre(formData: FormData) {
   const am_referent = formatReferent(
     String(formData.get('am_referent') ?? '')
   )
+  // Référence optionnelle : chaîne vide → NULL.
+  const reference = String(formData.get('reference') ?? '').trim() || null
 
   if (!id) return redirect('/offres?error=Offre+introuvable')
   if (!titre || !client_id) {
@@ -75,6 +77,7 @@ export async function updateOffre(formData: FormData) {
       seuil,
       date_validite,
       am_referent,
+      reference,
     })
     .eq('id', id)
 

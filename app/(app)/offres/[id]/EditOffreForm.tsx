@@ -11,7 +11,7 @@ const CONTRATS: Contrat[] = ['CDI', 'CDD', 'Alternance', 'Stage']
 
 type Offre = {
   id: string
-  reference: string
+  reference: string | null
   titre: string | null
   description: string | null
   lieu: string | null
@@ -37,6 +37,7 @@ export default function EditOffreForm({
   /** Liste des référents proposés dans le select. */
   availableReferents: string[]
 }) {
+  const [reference, setReference] = useState(offre.reference ?? '')
   const [titre, setTitre] = useState(offre.titre ?? '')
   const [clientId, setClientId] = useState(offre.client_id ?? '')
   const [lieu, setLieu] = useState(offre.lieu ?? '')
@@ -89,13 +90,15 @@ export default function EditOffreForm({
         </label>
         <input
           id="reference"
+          name="reference"
           type="text"
-          readOnly
-          value={offre.reference}
-          className="w-full px-3 py-2 border border-border-soft rounded-md bg-surface font-mono text-brand-purple font-semibold cursor-not-allowed"
+          value={reference}
+          onChange={(e) => setReference(e.target.value)}
+          placeholder="Ex : TECH-2026-018"
+          className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
         />
         <p className="text-xs text-muted mt-1">
-          Référence unique générée automatiquement à la création de l&apos;offre.
+          Référence attribuée par le client, optionnelle.
         </p>
       </div>
 

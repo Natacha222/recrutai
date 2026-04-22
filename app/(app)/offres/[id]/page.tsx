@@ -153,10 +153,15 @@ export default async function OffreDetailPage({
           ← Retour aux offres
         </Link>
         <div className="text-sm text-muted mt-2">
-          <span className="font-mono font-semibold text-brand-purple">
-            {offre.reference}
-          </span>
-          {clientInfo?.nom ? ` · ${clientInfo.nom}` : ''}
+          {offre.reference && (
+            <>
+              <span className="font-mono font-semibold text-brand-purple">
+                Réf. {offre.reference}
+              </span>
+              {' · '}
+            </>
+          )}
+          {clientInfo?.nom}
           {offre.lieu ? ` · ${offre.lieu}` : ''}
           {offre.date_validite
             ? ` · Valide jusqu'au ${formatValidite(offre.date_validite)}`

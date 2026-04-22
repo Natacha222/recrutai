@@ -409,7 +409,7 @@ export default async function OffresPage({
                 className="text-sm hover:bg-surface transition align-top"
               >
                 <td className="px-6 py-5 font-mono font-semibold text-brand-purple tabular-nums whitespace-nowrap">
-                  {o.reference}
+                  {o.reference ?? <span className="text-muted">—</span>}
                 </td>
                 <td className="px-6 py-5">
                   <Link

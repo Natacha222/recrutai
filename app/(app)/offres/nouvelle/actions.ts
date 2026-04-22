@@ -30,6 +30,10 @@ export async function createOffre(formData: FormData) {
   const am_referent = formatReferent(
     String(formData.get('am_referent') ?? '')
   )
+  // La référence est optionnelle : chaîne vide → NULL en base. On la stocke
+  // telle quelle (sans mise en majuscules) car les refs client sont parfois
+  // sensibles à la casse côté ATS client.
+  const reference = String(formData.get('reference') ?? '').trim() || null
 
   if (!titre || !client_id || !lieu || !description || !date_validite) {
     return redirect(
@@ -65,6 +69,7 @@ export async function createOffre(formData: FormData) {
       seuil,
       date_validite,
       am_referent,
+      reference,
     })
     .select('id')
     .single()
