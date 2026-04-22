@@ -12,6 +12,12 @@ import Anthropic from '@anthropic-ai/sdk'
  *   score >= seuil         → 'qualifié'
  *   score >= seuil - 15    → 'en attente'
  *   sinon                  → 'rejeté'
+ *
+ * Optimisation : la description d'offre + les instructions sont placées dans
+ * le `system` avec `cache_control: ephemeral`. Quand on score plusieurs CVs
+ * pour une même offre (batch upload), les appels suivants du même offreId
+ * bénéficient du prompt caching d'Anthropic → coût / 10 et moins de pression
+ * sur le rate limit input tokens/min. TTL cache : 5 minutes.
  */
 export type ScoringResult = {
   score: number
@@ -41,6 +47,24 @@ export async function scoreCandidate({
   const msg = await client.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 2048,
+    // Prompt system avec cache_control : identique pour tous les CVs d'une
+    // même offre → cache partagé entre appels sur 5 minutes.
+    system: [
+      {
+        type: 'text',
+        text: `Tu es un recruteur expérimenté. Tu évalues un CV (PDF joint dans le message suivant) par rapport à l'offre d'emploi ci-dessous, puis tu appelles l'outil evaluate_candidate.
+
+Offre d'emploi :
+"""
+${jobDescription ?? '(description non fournie)'}
+"""
+
+Seuil de qualification : ${seuil}/100.
+
+Sois factuel, concis et utile pour un recruteur pressé. Rédige la justification en français.`,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
     tools: [
       {
         name: 'evaluate_candidate',
@@ -95,21 +119,20 @@ export async function scoreCandidate({
           },
           {
             type: 'text',
-            text: `Tu es un recruteur expérimenté. Évalue le CV joint par rapport à l'offre d'emploi ci-dessous, puis appelle l'outil evaluate_candidate.
-
-Offre d'emploi :
-"""
-${jobDescription ?? '(description non fournie)'}
-"""
-
-Seuil de qualification : ${seuil}/100.
-
-Sois factuel, concis et utile pour un recruteur pressé. Rédige la justification en français.`,
+            text: "Évalue le CV ci-dessus en appelant l'outil evaluate_candidate.",
           },
         ],
       },
     ],
   })
+
+  // Log usage pour verifier que le cache est bien hit sur les CVs suivants.
+  // `cache_creation_input_tokens` > 0 sur le 1er appel, `cache_read_input_tokens`
+  // > 0 sur les suivants (tant que l'offre est la même et que <5min s'écoulent).
+  const u = msg.usage
+  console.log(
+    `[scoreCandidate] usage : input=${u.input_tokens} cache_create=${u.cache_creation_input_tokens ?? 0} cache_read=${u.cache_read_input_tokens ?? 0} output=${u.output_tokens}`
+  )
 
   const toolUse = msg.content.find((b) => b.type === 'tool_use')
   if (!toolUse || toolUse.type !== 'tool_use') {

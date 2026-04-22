@@ -184,69 +184,91 @@ export async function ingestCVs({
     cvBuffer: Buffer
   }
 
-  const prepared: Prepared[] = await Promise.all(
-    uploads.map(async (u) => {
-      // 1) Télécharge le PDF depuis Storage
-      const { data: blob, error: dlErr } = await supabase.storage
-        .from('cvs')
-        .download(u.path)
-      if (dlErr || !blob) {
-        throw new Error(
-          `Téléchargement ${u.filename} : ${dlErr?.message ?? 'blob vide'}`
-        )
-      }
-      const arrayBuffer = await blob.arrayBuffer()
-      const cvBuffer = Buffer.from(arrayBuffer)
+  // On capture les champs de l'offre dans des consts locaux : la narrowing
+  // TypeScript de `offre` (non-null après le guard) se perd dans la closure
+  // de la fonction nommée `processUpload`.
+  const offreDescription = offre.description
+  const offreSeuil = offre.seuil
 
-      // 2) URL signée longue durée (30 jours) pour le tableau des candidatures
-      const { data: signed } = await supabase.storage
-        .from('cvs')
-        .createSignedUrl(u.path, 60 * 60 * 24 * 30)
+  async function processUpload(u: {
+    path: string
+    filename: string
+  }): Promise<Prepared> {
+    // 1) Télécharge le PDF depuis Storage
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from('cvs')
+      .download(u.path)
+    if (dlErr || !blob) {
+      throw new Error(
+        `Téléchargement ${u.filename} : ${dlErr?.message ?? 'blob vide'}`
+      )
+    }
+    const arrayBuffer = await blob.arrayBuffer()
+    const cvBuffer = Buffer.from(arrayBuffer)
 
-      // 3) Scoring IA sur le PDF — on isole les erreurs pour ne pas casser
-      //    tout le batch si un CV pose problème.
-      let score = 0
-      let justification = ''
-      let statut = 'en attente'
-      let extractedName: string | undefined
-      let extractedEmail: string | undefined
-      try {
-        const res = await scoreCandidate({
-          cvBuffer,
-          jobDescription: offre.description,
-          seuil: offre.seuil,
-        })
-        score = res.score
-        justification = res.justification
-        statut = res.statut
-        extractedName = res.candidateName
-        extractedEmail = res.candidateEmail
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        console.error(`[ingestCVs] scoring IA échoué (${u.filename}) :`, msg)
-        justification = `Scoring IA indisponible : ${msg}`
-      }
+    // 2) URL signée longue durée (30 jours) pour le tableau des candidatures
+    const { data: signed } = await supabase.storage
+      .from('cvs')
+      .createSignedUrl(u.path, 60 * 60 * 24 * 30)
 
-      const nom = extractedName || candidateNameFromFilename(u.filename)
-      const email = extractedEmail || emailFromName(nom)
-
-      return {
-        row: {
-          offre_id: offreId,
-          nom,
-          email,
-          score_ia: score,
-          justification_ia: justification,
-          statut,
-          cv_url: signed?.signedUrl ?? null,
-          cv_path: u.path,
-          cv_filename: u.filename,
-        },
-        upload: u,
+    // 3) Scoring IA sur le PDF — on isole les erreurs pour ne pas casser
+    //    tout le batch si un CV pose problème.
+    let score = 0
+    let justification = ''
+    let statut = 'en attente'
+    let extractedName: string | undefined
+    let extractedEmail: string | undefined
+    try {
+      const res = await scoreCandidate({
         cvBuffer,
-      }
-    })
-  )
+        jobDescription: offreDescription,
+        seuil: offreSeuil,
+      })
+      score = res.score
+      justification = res.justification
+      statut = res.statut
+      extractedName = res.candidateName
+      extractedEmail = res.candidateEmail
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error(`[ingestCVs] scoring IA échoué (${u.filename}) :`, msg)
+      justification = `Scoring IA indisponible : ${msg}`
+    }
+
+    const nom = extractedName || candidateNameFromFilename(u.filename)
+    const email = extractedEmail || emailFromName(nom)
+
+    return {
+      row: {
+        offre_id: offreId,
+        nom,
+        email,
+        score_ia: score,
+        justification_ia: justification,
+        statut,
+        cv_url: signed?.signedUrl ?? null,
+        cv_path: u.path,
+        cv_filename: u.filename,
+      },
+      upload: u,
+      cvBuffer,
+    }
+  }
+
+  // On scorer le 1er CV de manière séquentielle pour AMORCER le cache de
+  // prompt d'Anthropic (l'offre + les instructions sont taguées
+  // cache_control: ephemeral dans scoreCandidate). Ensuite, les autres CVs
+  // partent en parallèle et bénéficient du cache : coût / 10 sur la portion
+  // d'offre, et pression sur la rate limit input tokens/min fortement
+  // réduite. Le cache est valide 5 minutes, largement assez pour un batch.
+  let prepared: Prepared[]
+  if (uploads.length <= 1) {
+    prepared = await Promise.all(uploads.map(processUpload))
+  } else {
+    const first = await processUpload(uploads[0])
+    const rest = await Promise.all(uploads.slice(1).map(processUpload))
+    prepared = [first, ...rest]
+  }
 
   const { error } = await supabase
     .from('candidatures')
