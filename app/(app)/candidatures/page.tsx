@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { FiltersReset, SelectFilter } from '@/components/TableFilters'
 import StatusBadge from '@/components/StatusBadge'
+import ResendEmailAction from '@/components/ResendEmailAction'
 import TrancherActions from './TrancherActions'
 
 /**
@@ -37,6 +38,12 @@ type CandidatureRow = {
   created_at: string | null
   cv_url: string | null
   justification_ia: string | null
+  /** Dernier envoi d'email réussi. NULL si jamais envoyé ou si le dernier
+   *  essai a échoué — dans ce cas `email_error` contient le message. */
+  email_sent_at: string | null
+  /** Message d'erreur du dernier envoi échoué (Resend down, clé absente,
+   *  pas de destinataire…). NULL si le dernier envoi est passé. */
+  email_error: string | null
   offres:
     | {
         id: string
@@ -75,7 +82,7 @@ export default async function CandidaturesPage({
   const { data: rows } = await supabase
     .from('candidatures')
     .select(
-      'id, nom, email, score_ia, statut, created_at, cv_url, justification_ia, offres(id, titre, reference, seuil, am_referent)'
+      'id, nom, email, score_ia, statut, created_at, cv_url, justification_ia, email_sent_at, email_error, offres(id, titre, reference, seuil, am_referent)'
     )
     .order('created_at', { ascending: false })
 
@@ -324,6 +331,18 @@ export default async function CandidaturesPage({
                       >
                         {raison.label}
                       </div>
+                    )}
+                    {/* Alerte + relance : candidature qualifiée mais le
+                        dernier envoi email a échoué. Inline sous le badge
+                        statut pour que l'AM voie les deux d'un coup d'œil
+                        (le candidat est bien passé mais le client n'a
+                        pas encore été notifié). */}
+                    {c.statut === 'qualifié' && c.email_error && (
+                      <ResendEmailAction
+                        candidatureId={c.id}
+                        emailError={c.email_error}
+                        size="sm"
+                      />
                     )}
                   </td>
                   <td className="px-4 py-3 max-w-md min-w-[16rem]">

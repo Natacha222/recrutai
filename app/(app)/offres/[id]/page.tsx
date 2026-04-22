@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
+import ResendEmailAction from '@/components/ResendEmailAction'
 import { formatValidite, effectiveStatut, isExpired } from '@/lib/format'
 import {
   DateFilter,
@@ -86,7 +87,7 @@ export default async function OffreDetailPage({
   const { data: candidatures } = await supabase
     .from('candidatures')
     .select(
-      'id, nom, email, score_ia, justification_ia, statut, cv_url, created_at'
+      'id, nom, email, score_ia, justification_ia, statut, cv_url, created_at, email_sent_at, email_error'
     )
     .eq('offre_id', id)
     .order('score_ia', { ascending: false, nullsFirst: false })
@@ -335,6 +336,17 @@ export default async function OffreDetailPage({
                 </td>
                 <td className="px-6 py-4">
                   <StatusBadge status={c.statut ?? 'en attente'} />
+                  {/* Alerte + relance : candidature qualifiée mais dernier
+                      envoi email a échoué (Resend, contact manquant…).
+                      Inline sous le badge statut pour que l'AM voie les
+                      deux d'un coup d'œil. */}
+                  {c.statut === 'qualifié' && c.email_error && (
+                    <ResendEmailAction
+                      candidatureId={c.id}
+                      emailError={c.email_error}
+                      size="md"
+                    />
+                  )}
                 </td>
                 <td className="px-6 py-4 text-muted">
                   {new Date(c.created_at).toLocaleDateString('fr-FR')}

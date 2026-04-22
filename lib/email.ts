@@ -1,4 +1,48 @@
 import { Resend } from 'resend'
+import type { createClient } from '@/lib/supabase/server'
+
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
+
+/**
+ * Résultat de `sendQualifiedCandidateEmail`. Extrait en type pour pouvoir
+ * le passer tel quel à `persistEmailResult` sans re-déballer les champs.
+ */
+export type EmailSendResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Persiste l'état courant du dernier envoi d'email pour une candidature.
+ *
+ * À appeler systématiquement juste après chaque `sendQualifiedCandidateEmail`.
+ * Les deux colonnes `email_sent_at` / `email_error` reflètent toujours l'ÉTAT
+ * COURANT (dernière tentative uniquement), pas l'historique :
+ *   - succès → sent_at = now(), error = NULL
+ *   - échec  → sent_at = NULL,  error = message
+ * Cela simplifie la logique UI : « statut = qualifié ET email_error != NULL »
+ * ⇒ afficher badge d'alerte + bouton « Renvoyer ».
+ *
+ * Si l'UPDATE lui-même échoue (cas rarissime — Supabase down, RLS cassée),
+ * on se contente de logguer : on ne veut surtout pas masquer le vrai
+ * résultat de l'envoi à l'appelant (qui doit continuer à retourner ok=true
+ * si l'email est bien parti).
+ */
+export async function persistEmailResult(
+  supabase: SupabaseServerClient,
+  candidatureId: string,
+  result: EmailSendResult
+): Promise<void> {
+  const payload = result.ok
+    ? { email_sent_at: new Date().toISOString(), email_error: null }
+    : { email_sent_at: null, email_error: result.error }
+  const { error } = await supabase
+    .from('candidatures')
+    .update(payload)
+    .eq('id', candidatureId)
+  if (error) {
+    console.warn(
+      `[persistEmailResult] UPDATE échoué pour ${candidatureId} : ${error.message}`
+    )
+  }
+}
 
 /**
  * Envoie une notification email quand un CV est qualifié par l'IA.
@@ -37,7 +81,7 @@ export async function sendQualifiedCandidateEmail({
   justification: string
   cvBuffer: Buffer
   cvFilename: string
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<EmailSendResult> {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     return { ok: false, error: 'RESEND_API_KEY manquant' }

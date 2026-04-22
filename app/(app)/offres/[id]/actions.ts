@@ -4,7 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { scoreCandidate } from '@/lib/scoring'
-import { sendQualifiedCandidateEmail } from '@/lib/email'
+import {
+  persistEmailResult,
+  sendQualifiedCandidateEmail,
+} from '@/lib/email'
 import { effectiveStatut, formatReferent, todayIso } from '@/lib/format'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
@@ -327,11 +330,21 @@ export async function ingestCVs({
     prepared = [first, ...rest]
   }
 
-  const { error } = await supabase
+  // `.select('id, cv_path')` pour récupérer les IDs générés : on en a besoin
+  // pour persister le résultat de l'envoi email (`email_sent_at` / `email_error`)
+  // sur chaque candidature individuellement. Le matching par cv_path est
+  // robuste (chaque upload a un path unique avec timestamp), donc même si
+  // PostgREST réordonne les lignes retournées ça fonctionne.
+  const { data: inserted, error } = await supabase
     .from('candidatures')
     .insert(prepared.map((p) => p.row))
+    .select('id, cv_path')
   if (error) {
     return { ok: false, error: error.message }
+  }
+  const pathToId = new Map<string, string>()
+  for (const row of inserted ?? []) {
+    if (row.cv_path) pathToId.set(row.cv_path, row.id)
   }
 
   // Notification email pour chaque CV qualifié (≥ seuil)
@@ -350,9 +363,34 @@ export async function ingestCVs({
     skippedReason =
       "Aucune adresse de notification (NOTIFICATION_EMAIL_OVERRIDE non défini et clients.contact_email manquant)."
     console.warn(`[ingestCVs] ${skippedReason}`)
+    // Marque toutes les qualifiées comme "email en échec" pour que le
+    // badge ⚠️ apparaisse dans la liste — sans ça, l'AM ne saurait jamais
+    // que le client n'a rien reçu.
+    await Promise.all(
+      qualified.map(async (p) => {
+        const id = pathToId.get(p.row.cv_path)
+        if (id) {
+          await persistEmailResult(supabase, id, {
+            ok: false,
+            error: skippedReason!,
+          })
+        }
+      })
+    )
   } else if (!process.env.RESEND_API_KEY) {
     skippedReason = 'RESEND_API_KEY non défini côté serveur.'
     console.warn(`[ingestCVs] ${skippedReason}`)
+    await Promise.all(
+      qualified.map(async (p) => {
+        const id = pathToId.get(p.row.cv_path)
+        if (id) {
+          await persistEmailResult(supabase, id, {
+            ok: false,
+            error: skippedReason!,
+          })
+        }
+      })
+    )
   } else if (qualified.length === 0) {
     skippedReason = 'Aucun CV n\'a atteint le seuil.'
   } else {
@@ -370,6 +408,10 @@ export async function ingestCVs({
           cvBuffer: p.cvBuffer,
           cvFilename: p.upload.filename,
         })
+        // Persiste l'état avant de throw pour le comptage — on veut
+        // TOUJOURS laisser une trace en DB, qu'on ait réussi ou non.
+        const id = pathToId.get(p.row.cv_path)
+        if (id) await persistEmailResult(supabase, id, res)
         if (!res.ok) throw new Error(res.error)
       })
     )
@@ -482,17 +524,28 @@ export async function qualifyCandidature(
   revalidatePath('/candidatures/flottement')
   revalidatePath('/candidatures/incompletes')
 
+  // Helper local : persiste l'échec + renvoie le warning à l'UI. On
+  // persiste dans TOUS les cas d'échec (technique ou volontaire) pour
+  // qu'un badge ⚠️ apparaisse dans la liste et que l'AM puisse relancer
+  // plus tard (ex : après avoir renseigné contact_email ou réactivé l'offre).
+  const failAndReport = async (
+    reason: string
+  ): Promise<PromoteResult> => {
+    await persistEmailResult(supabase, candidatureId, {
+      ok: false,
+      error: reason,
+    })
+    return { ok: true, emailSent: false, skippedReason: reason }
+  }
+
   // Garde-fou : si l'offre a été clôturée (manuellement ou date dépassée)
   // depuis que le CV a été scoré, on change bien le statut de la
   // candidature mais on n'envoie PAS l'email au client — ça n'aurait pas
   // de sens de le relancer sur une offre fermée.
   if (effectiveStatut(offre.statut, offre.date_validite) === 'clos') {
-    return {
-      ok: true,
-      emailSent: false,
-      skippedReason:
-        "Offre clôturée (statut manuel ou date de validité dépassée) : email non envoyé.",
-    }
+    return await failAndReport(
+      "Offre clôturée (statut manuel ou date de validité dépassée) : email non envoyé."
+    )
   }
 
   // Prépare l'envoi email
@@ -503,27 +556,17 @@ export async function qualifyCandidature(
   const notifTo = override || clientInfo?.contact_email || null
 
   if (!notifTo) {
-    return {
-      ok: true,
-      emailSent: false,
-      skippedReason:
-        "Aucune adresse de notification (NOTIFICATION_EMAIL_OVERRIDE non défini et clients.contact_email manquant).",
-    }
+    return await failAndReport(
+      "Aucune adresse de notification (NOTIFICATION_EMAIL_OVERRIDE non défini et clients.contact_email manquant)."
+    )
   }
   if (!process.env.RESEND_API_KEY) {
-    return {
-      ok: true,
-      emailSent: false,
-      skippedReason: 'RESEND_API_KEY non défini côté serveur.',
-    }
+    return await failAndReport('RESEND_API_KEY non défini côté serveur.')
   }
   if (!cand.cv_path) {
-    return {
-      ok: true,
-      emailSent: false,
-      skippedReason:
-        "CV introuvable dans le storage (candidature importée avant l'ajout de cv_path).",
-    }
+    return await failAndReport(
+      "CV introuvable dans le storage (candidature importée avant l'ajout de cv_path)."
+    )
   }
 
   // Télécharge le PDF du CV pour la pièce jointe
@@ -531,11 +574,9 @@ export async function qualifyCandidature(
     .from('cvs')
     .download(cand.cv_path)
   if (dlErr || !blob) {
-    return {
-      ok: true,
-      emailSent: false,
-      skippedReason: `Téléchargement CV échoué : ${dlErr?.message ?? 'blob vide'}`,
-    }
+    return await failAndReport(
+      `Téléchargement CV échoué : ${dlErr?.message ?? 'blob vide'}`
+    )
   }
   const arrayBuffer = await blob.arrayBuffer()
   const cvBuffer = Buffer.from(arrayBuffer)
@@ -552,6 +593,10 @@ export async function qualifyCandidature(
     cvBuffer,
     cvFilename: cand.cv_filename || `CV-${cand.nom}.pdf`,
   })
+
+  // Toujours persister, succès comme échec — c'est la source de vérité
+  // qui alimente le badge ⚠️ et le bouton « Renvoyer » dans les listes.
+  await persistEmailResult(supabase, candidatureId, res)
 
   if (!res.ok) {
     return { ok: true, emailSent: false, skippedReason: res.error }
