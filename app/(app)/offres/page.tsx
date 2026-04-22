@@ -41,6 +41,7 @@ const STATUTS: { value: string; label: string }[] = [
 ]
 
 const FILTER_FIELDS = [
+  'ref_q',
   'q',
   'client',
   'referent',
@@ -88,6 +89,8 @@ function SortableHeader({
 }
 
 type SearchParams = Promise<{
+  /** Recherche texte sur la référence d'offre (ex : "tech-2026"). */
+  ref_q?: string
   q?: string
   client?: string
   referent?: string
@@ -106,6 +109,7 @@ export default async function OffresPage({
 }) {
   const params = await searchParams
   const {
+    ref_q = '',
     q = '',
     client = '',
     referent = '',
@@ -169,7 +173,14 @@ export default async function OffresPage({
 
   // Filter
   const qLower = q.trim().toLowerCase()
+  const refQLower = ref_q.trim().toLowerCase()
   const filtered = allOffres.filter((o) => {
+    if (
+      refQLower &&
+      !(o.reference ?? '').toLowerCase().includes(refQLower)
+    ) {
+      return false
+    }
     if (qLower && !(o.titre ?? '').toLowerCase().includes(qLower)) return false
     if (client && o.clientNom !== client) return false
     if (referent && o.am_referent !== referent) return false
@@ -240,6 +251,7 @@ export default async function OffresPage({
   const offresActives = allOffres.filter((o) => o.effective === 'actif').length
   const offresClos = allOffres.filter((o) => o.effective === 'clos').length
   const hasFilter = !!(
+    refQLower ||
     q ||
     client ||
     referent ||
@@ -259,6 +271,7 @@ export default async function OffresPage({
   function sortHref(key: SortKey) {
     const newDir: SortDir = sort === key && dir === 'asc' ? 'desc' : 'asc'
     const sp = new URLSearchParams()
+    if (ref_q) sp.set('ref_q', ref_q)
     if (q) sp.set('q', q)
     if (client) sp.set('client', client)
     if (referent) sp.set('referent', referent)
@@ -359,7 +372,9 @@ export default async function OffresPage({
               <th className="px-6 pt-3 pb-2">Action</th>
             </tr>
             <tr className="align-top">
-              <th className="px-6 pt-0 pb-3"></th>
+              <th className="px-6 pt-0 pb-3 font-normal normal-case">
+                <TextFilter field="ref_q" placeholder="Référence…" />
+              </th>
               <th className="px-6 pt-0 pb-3 font-normal normal-case">
                 <TextFilter field="q" placeholder="Intitulé…" />
               </th>
