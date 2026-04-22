@@ -142,7 +142,7 @@ export async function ingestCVs({
   const { data: offre, error: offreErr } = await supabase
     .from('offres')
     .select(
-      'id, titre, description, seuil, statut, date_validite, clients(contact_email)'
+      'id, reference, titre, description, seuil, statut, date_validite, clients(contact_email)'
     )
     .eq('id', offreId)
     .single()
@@ -278,6 +278,7 @@ export async function ingestCVs({
       qualified.map(async (p) => {
         const res = await sendQualifiedCandidateEmail({
           to: notifTo,
+          offreReference: offre.reference,
           offreTitle: offre.titre,
           candidateName: p.row.nom,
           candidateEmail: p.row.email,
@@ -347,7 +348,7 @@ export async function qualifyCandidature(
 
   const { data: offre, error: offreErr } = await supabase
     .from('offres')
-    .select('id, titre, seuil, clients(contact_email)')
+    .select('id, reference, titre, seuil, clients(contact_email)')
     .eq('id', cand.offre_id)
     .single()
 
@@ -413,6 +414,7 @@ export async function qualifyCandidature(
 
   const res = await sendQualifiedCandidateEmail({
     to: notifTo,
+    offreReference: offre.reference,
     offreTitle: offre.titre,
     candidateName: cand.nom,
     candidateEmail: cand.email ?? '',

@@ -10,6 +10,7 @@ import {
 } from '@/components/TableFilters'
 
 type SortKey =
+  | 'reference'
   | 'titre'
   | 'client'
   | 'referent'
@@ -21,6 +22,7 @@ type SortKey =
 type SortDir = 'asc' | 'desc'
 
 const SORT_KEYS: SortKey[] = [
+  'reference',
   'titre',
   'client',
   'referent',
@@ -125,7 +127,7 @@ export default async function OffresPage({
   const { data: offres } = await supabase
     .from('offres')
     .select(
-      'id, titre, lieu, statut, contrat, seuil, created_at, date_validite, am_referent, clients(nom), candidatures(id, statut)'
+      'id, reference, titre, lieu, statut, contrat, seuil, created_at, date_validite, am_referent, clients(nom), candidatures(id, statut)'
     )
 
   const allOffres = (offres ?? []).map((o) => {
@@ -188,6 +190,10 @@ export default async function OffresPage({
     let av: string | number
     let bv: string | number
     switch (sort) {
+      case 'reference':
+        av = (a.reference ?? '').toLowerCase()
+        bv = (b.reference ?? '').toLowerCase()
+        break
       case 'client':
         av = (a.clientNom ?? '').toLowerCase()
         bv = (b.clientNom ?? '').toLowerCase()
@@ -288,6 +294,13 @@ export default async function OffresPage({
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
               <SortableHeader
+                label="Référence"
+                sortKey="reference"
+                sort={sort}
+                dir={dir}
+                href={sortHref('reference')}
+              />
+              <SortableHeader
                 label="Intitulé"
                 sortKey="titre"
                 sort={sort}
@@ -346,6 +359,7 @@ export default async function OffresPage({
               <th className="px-6 pt-3 pb-2">Action</th>
             </tr>
             <tr className="align-top">
+              <th className="px-6 pt-0 pb-3"></th>
               <th className="px-6 pt-0 pb-3 font-normal normal-case">
                 <TextFilter field="q" placeholder="Intitulé…" />
               </th>
@@ -394,6 +408,9 @@ export default async function OffresPage({
                 key={o.id}
                 className="text-sm hover:bg-surface transition align-top"
               >
+                <td className="px-6 py-5 font-mono font-semibold text-brand-purple tabular-nums whitespace-nowrap">
+                  {o.reference}
+                </td>
                 <td className="px-6 py-5">
                   <Link
                     href={`/offres/${o.id}`}
@@ -440,7 +457,7 @@ export default async function OffresPage({
             {sorted.length === 0 && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-6 py-8 text-center text-muted text-sm"
                 >
                   {hasFilter

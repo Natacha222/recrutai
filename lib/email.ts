@@ -15,6 +15,7 @@ import { Resend } from 'resend'
  */
 export async function sendQualifiedCandidateEmail({
   to,
+  offreReference,
   offreTitle,
   candidateName,
   candidateEmail,
@@ -25,6 +26,7 @@ export async function sendQualifiedCandidateEmail({
   cvFilename,
 }: {
   to: string
+  offreReference: string
   offreTitle: string
   candidateName: string
   candidateEmail: string
@@ -42,7 +44,7 @@ export async function sendQualifiedCandidateEmail({
   const resend = new Resend(apiKey)
   const from = process.env.RESEND_FROM ?? 'RecrutAI <onboarding@resend.dev>'
 
-  const subject = `${offreTitle} - nouveau CV qualifié`
+  const subject = `[${offreReference}] ${offreTitle} - nouveau CV qualifié`
 
   const displayName = candidateName?.trim() || 'Un nouveau candidat'
   const hasRealEmail =

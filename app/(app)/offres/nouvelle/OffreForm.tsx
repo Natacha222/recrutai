@@ -195,6 +195,25 @@ export default function OffreForm({
       >
         <div>
           <label
+            htmlFor="reference"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
+            Référence
+          </label>
+          <input
+            id="reference"
+            type="text"
+            readOnly
+            value="Générée automatiquement (OFF-XXXX)"
+            className="w-full px-3 py-2 border border-border-soft rounded-md bg-surface text-muted italic cursor-not-allowed"
+          />
+          <p className="text-xs text-muted mt-1">
+            Attribuée automatiquement après enregistrement.
+          </p>
+        </div>
+
+        <div>
+          <label
             htmlFor="titre"
             className="block text-sm font-medium text-brand-indigo-text mb-1"
           >

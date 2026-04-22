@@ -64,7 +64,7 @@ export default async function OffreDetailPage({
   const { data: offre } = await supabase
     .from('offres')
     .select(
-      'id, titre, lieu, statut, seuil, date_validite, am_referent, clients(nom, secteur)'
+      'id, reference, titre, lieu, statut, seuil, date_validite, am_referent, clients(nom, secteur)'
     )
     .eq('id', id)
     .single()
@@ -153,7 +153,10 @@ export default async function OffreDetailPage({
           ← Retour aux offres
         </Link>
         <div className="text-sm text-muted mt-2">
-          {clientInfo?.nom}
+          <span className="font-mono font-semibold text-brand-purple">
+            {offre.reference}
+          </span>
+          {clientInfo?.nom ? ` · ${clientInfo.nom}` : ''}
           {offre.lieu ? ` · ${offre.lieu}` : ''}
           {offre.date_validite
             ? ` · Valide jusqu'au ${formatValidite(offre.date_validite)}`

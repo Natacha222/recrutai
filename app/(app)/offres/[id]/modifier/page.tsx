@@ -22,7 +22,7 @@ export default async function ModifierOffrePage({
   const { data: offre } = await supabase
     .from('offres')
     .select(
-      'id, titre, description, lieu, contrat, seuil, date_validite, client_id, am_referent'
+      'id, reference, titre, description, lieu, contrat, seuil, date_validite, client_id, am_referent'
     )
     .eq('id', id)
     .single()
@@ -50,7 +50,12 @@ export default async function ModifierOffrePage({
           ← Retour à l&apos;offre
         </Link>
         <h1 className="text-2xl font-bold mt-2">Modifier l&apos;offre</h1>
-        <p className="text-sm text-muted mt-1">{offre.titre}</p>
+        <p className="text-sm text-muted mt-1">
+          <span className="font-mono font-semibold text-brand-purple">
+            {offre.reference}
+          </span>
+          {offre.titre ? ` · ${offre.titre}` : ''}
+        </p>
       </div>
 
       {error && (
@@ -63,6 +68,7 @@ export default async function ModifierOffrePage({
         <EditOffreForm
           offre={{
             id: offre.id,
+            reference: offre.reference,
             titre: offre.titre,
             description: offre.description,
             lieu: offre.lieu,

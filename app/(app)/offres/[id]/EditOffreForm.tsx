@@ -11,6 +11,7 @@ const CONTRATS: Contrat[] = ['CDI', 'CDD', 'Alternance', 'Stage']
 
 type Offre = {
   id: string
+  reference: string
   titre: string | null
   description: string | null
   lieu: string | null
@@ -78,6 +79,25 @@ export default function EditOffreForm({
   return (
     <form action={updateOffre} className="px-6 pb-6 pt-6 space-y-4">
       <input type="hidden" name="id" value={offre.id} />
+
+      <div>
+        <label
+          htmlFor="reference"
+          className="block text-sm font-medium text-brand-indigo-text mb-1"
+        >
+          Référence
+        </label>
+        <input
+          id="reference"
+          type="text"
+          readOnly
+          value={offre.reference}
+          className="w-full px-3 py-2 border border-border-soft rounded-md bg-surface font-mono text-brand-purple font-semibold cursor-not-allowed"
+        />
+        <p className="text-xs text-muted mt-1">
+          Référence unique générée automatiquement à la création de l&apos;offre.
+        </p>
+      </div>
 
       <div>
         <label
