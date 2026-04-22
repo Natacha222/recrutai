@@ -120,7 +120,7 @@ export default function TrancherActions({
           title="Le scoring initial a échoué. Relancer pour obtenir un vrai score."
           className="px-2.5 py-1.5 rounded-md bg-brand-purple text-white text-xs font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <span aria-hidden="true">↻</span> Relancer le scoring
+          <span aria-hidden="true">↻</span> Relancer
         </button>
       )}
       {/* Live region persistante : les utilisateurs de lecteur d'écran
