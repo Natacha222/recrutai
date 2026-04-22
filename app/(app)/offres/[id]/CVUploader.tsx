@@ -21,6 +21,11 @@ const SCORING_CONCURRENCY = 5
 const SCORING_FIRST_SEC = 15
 const SCORING_BATCH_SEC = 18
 
+// Taille max d'un CV. 10 Mo couvre largement les CVs réels (typiquement
+// 200 Ko – 3 Mo). Synchronisé avec le safety-net côté action serveur
+// (MAX_CV_SIZE dans [id]/actions.ts) et avec extractOffreAction.
+const MAX_CV_SIZE = 10 * 1024 * 1024
+
 // Durée d'affichage (en ms) du temps total réel après la fin de
 // l'ingestion. L'utilisateur le voit brièvement à titre indicatif puis
 // il disparaît pour ne pas encombrer l'UI.
@@ -105,6 +110,22 @@ export default function CVUploader({
       return
     }
 
+    // Rejet immédiat des fichiers > 10 Mo. On affiche leur nom pour que
+    // l'utilisateur sache lesquels retirer. Le serveur a un safety-net
+    // équivalent au cas où quelqu'un contourne ce check.
+    const tooBig = pdfFiles.filter((f) => f.size > MAX_CV_SIZE)
+    if (tooBig.length > 0) {
+      setStatus('error')
+      setMessage(
+        `${tooBig.length} fichier${tooBig.length > 1 ? 's' : ''} dépasse${
+          tooBig.length > 1 ? 'nt' : ''
+        } 10 Mo et ${
+          tooBig.length > 1 ? 'ont été ignorés' : 'a été ignoré'
+        } : ${tooBig.map((f) => f.name).join(', ')}`
+      )
+      return
+    }
+
     const supabase = createClient()
     const startedAt = Date.now()
     totalStartRef.current = startedAt
@@ -143,9 +164,18 @@ export default function CVUploader({
 
       const n = result.notifications
       const plural = uploads.length > 1 ? 's' : ''
-      const parts: string[] = [
-        `${uploads.length} CV${plural} ajouté${plural} et scoré${plural}.`,
-      ]
+      const scoredCount = uploads.length - n.scoringFailures
+      // Message principal : honnête sur ce qui a été réellement scoré vs
+      // mis en attente à cause d'une panne IA. Si tout s'est bien passé,
+      // on garde la formulation courte « N CVs ajoutés et scorés ».
+      const parts: string[] =
+        n.scoringFailures === 0
+          ? [`${uploads.length} CV${plural} ajouté${plural} et scoré${plural}.`]
+          : [
+              `${uploads.length} CV${plural} ajouté${plural} : ${scoredCount} scoré${
+                scoredCount > 1 ? 's' : ''
+              }, ${n.scoringFailures} en attente (scoring IA indisponible).`,
+            ]
       if (n.qualifiedCount > 0) {
         if (n.sentCount > 0) {
           parts.push(
@@ -162,11 +192,22 @@ export default function CVUploader({
           )
         }
       }
+      if (n.scoringFailures > 0) {
+        parts.push(
+          `Tu peux relancer le scoring de ${
+            n.scoringFailures > 1 ? 'ces CVs' : 'ce CV'
+          } depuis /candidatures (bouton « Relancer »).`
+        )
+      }
       if (n.skippedReason) parts.push(n.skippedReason)
 
       const totalSec = (Date.now() - totalStartRef.current) / 1000
       setFinalDurationSec(totalSec)
-      setStatus(n.errors.length > 0 ? 'error' : 'done')
+      // État 'error' (rouge) dès qu'il y a au moins un souci : email raté
+      // OU scoring IA qui a planté. C'est loud mais nécessaire — sinon
+      // l'utilisateur manque le fait que X de ses CVs ne sont pas scorés.
+      const hasIssues = n.errors.length > 0 || n.scoringFailures > 0
+      setStatus(hasIssues ? 'error' : 'done')
       setMessage(parts.join(' '))
       if (inputRef.current) inputRef.current.value = ''
     } catch (e) {

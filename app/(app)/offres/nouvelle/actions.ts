@@ -13,6 +13,13 @@ const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
+// Taille max d'un PDF uploadé (offre ou CV côté CVUploader). 10 Mo est
+// largement au-dessus de ce qu'on rencontre en pratique (CV ~1-3 Mo, offre
+// ~2-5 Mo) et nous protège contre un user qui renommerait une archive ou
+// une vidéo en .pdf — un fichier de 500 Mo planterait la RAM de la fonction
+// serverless Vercel (~1 Go max). Synchronisé avec le check côté CVUploader.
+const MAX_PDF_SIZE = 10 * 1024 * 1024
+
 export async function createOffre(formData: FormData) {
   const supabase = await createClient()
 
@@ -120,6 +127,13 @@ export async function extractOffreAction(
     !file.name.toLowerCase().endsWith('.pdf')
   ) {
     return { ok: false, error: 'Seul un PDF est accepté.' }
+  }
+  if (file.size > MAX_PDF_SIZE) {
+    const sizeMb = (file.size / 1024 / 1024).toFixed(1)
+    return {
+      ok: false,
+      error: `Fichier trop volumineux (${sizeMb} Mo). Limite : 10 Mo.`,
+    }
   }
 
   const arrayBuffer = await file.arrayBuffer()

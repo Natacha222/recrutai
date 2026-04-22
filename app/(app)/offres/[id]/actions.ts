@@ -11,6 +11,13 @@ const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
+// Safety-net serveur : même limite que le check côté CVUploader. Si un
+// attaquant contourne le check client (upload direct Supabase Storage via
+// l'API publique), on refuse le CV avant de le renvoyer à Claude — ça
+// protège la facturation Anthropic (pas de scoring sur un faux PDF de
+// 500 Mo) et la RAM de la fonction serverless.
+const MAX_CV_SIZE = 10 * 1024 * 1024
+
 export async function updateOffre(formData: FormData) {
   const supabase = await createClient()
 
@@ -124,6 +131,11 @@ export type IngestResult =
         qualifiedCount: number
         sentCount: number
         errors: string[]
+        // Nombre de CVs pour lesquels le scoring IA a planté (rate limit
+        // Claude, timeout, PDF invalide, etc.). Ils sont quand même insérés
+        // en BD avec statut 'en attente' et justification « Scoring IA
+        // indisponible : … » — à relancer depuis /candidatures.
+        scoringFailures: number
         skippedReason?: string
       }
     }
@@ -182,6 +194,10 @@ export async function ingestCVs({
     }
     upload: { path: string; filename: string }
     cvBuffer: Buffer
+    // Flag explicite : true si scoreCandidate a throw (distinct d'un CV
+    // légitimement sous seuil). Sert à compter les scoringFailures pour
+    // informer l'utilisateur en UI.
+    scoringFailed: boolean
   }
 
   // On capture les champs de l'offre dans des consts locaux : la narrowing
@@ -206,6 +222,12 @@ export async function ingestCVs({
     const arrayBuffer = await blob.arrayBuffer()
     const cvBuffer = Buffer.from(arrayBuffer)
 
+    if (cvBuffer.length > MAX_CV_SIZE) {
+      throw new Error(
+        `${u.filename} dépasse 10 Mo — CV ignoré (protection Claude + RAM).`
+      )
+    }
+
     // 2) URL signée longue durée (30 jours) pour le tableau des candidatures
     const { data: signed } = await supabase.storage
       .from('cvs')
@@ -218,6 +240,7 @@ export async function ingestCVs({
     let statut = 'en attente'
     let extractedName: string | undefined
     let extractedEmail: string | undefined
+    let scoringFailed = false
     try {
       const res = await scoreCandidate({
         cvBuffer,
@@ -233,6 +256,7 @@ export async function ingestCVs({
       const msg = e instanceof Error ? e.message : String(e)
       console.error(`[ingestCVs] scoring IA échoué (${u.filename}) :`, msg)
       justification = `Scoring IA indisponible : ${msg}`
+      scoringFailed = true
     }
 
     const nom = extractedName || candidateNameFromFilename(u.filename)
@@ -252,6 +276,7 @@ export async function ingestCVs({
       },
       upload: u,
       cvBuffer,
+      scoringFailed,
     }
   }
 
@@ -359,6 +384,11 @@ export async function ingestCVs({
     }
   }
 
+  // Compte les CVs dont le scoring IA a planté — l'utilisateur doit le
+  // voir pour savoir qu'il faut relancer manuellement (sinon il croit
+  // que ces CVs sont réellement mauvais, alors qu'ils n'ont pas été évalués).
+  const scoringFailures = prepared.filter((p) => p.scoringFailed).length
+
   revalidatePath(`/offres/${offreId}`)
   revalidatePath('/offres')
   revalidatePath('/dashboard')
@@ -371,6 +401,7 @@ export async function ingestCVs({
       qualifiedCount: qualified.length,
       sentCount,
       errors: notifErrors,
+      scoringFailures,
       skippedReason,
     },
   }
@@ -418,13 +449,29 @@ export async function qualifyCandidature(
     return { ok: false, error: "Offre introuvable." }
   }
 
-  // Passe le statut à qualifié
-  const { error: updErr } = await supabase
+  // UPDATE conditionnel sur `statut = 'en attente'` : si deux clics ou deux
+  // onglets déclenchent qualifyCandidature en parallèle (ou si l'utilisateur
+  // a rafraîchi pendant le premier appel), seul le premier passe. Les
+  // suivants voient `updated = []` et sortent SANS ré-envoyer d'email au
+  // client. `select('id')` force PostgREST à retourner les lignes
+  // effectivement mises à jour (sinon on ne peut pas distinguer 0 vs 1 row).
+  const { data: updated, error: updErr } = await supabase
     .from('candidatures')
     .update({ statut: 'qualifié' })
     .eq('id', candidatureId)
+    .eq('statut', 'en attente')
+    .select('id')
 
   if (updErr) return { ok: false, error: updErr.message }
+
+  if (!updated || updated.length === 0) {
+    return {
+      ok: true,
+      emailSent: false,
+      skippedReason:
+        'Candidature déjà tranchée (qualifiée ou rejetée) — email non envoyé.',
+    }
+  }
 
   revalidatePath(`/offres/${cand.offre_id}`)
   revalidatePath('/dashboard')
@@ -533,17 +580,28 @@ export async function rejectCandidature(
     return { ok: false, error: 'Candidature introuvable.' }
   }
 
-  const { error } = await supabase
+  // UPDATE conditionnel : voir commentaire équivalent dans qualifyCandidature.
+  // Si la candidature n'est plus « en attente », on renvoie `ok: true` quand
+  // même (pour ne pas afficher d'erreur à l'utilisateur qui voulait juste
+  // rejeter — le résultat final est le même : la candidature n'est plus
+  // en attente).
+  const { data: updated, error } = await supabase
     .from('candidatures')
     .update({ statut: 'rejeté' })
     .eq('id', candidatureId)
+    .eq('statut', 'en attente')
+    .select('id')
 
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath(`/offres/${cand.offre_id}`)
-  revalidatePath('/dashboard')
-  revalidatePath('/candidatures')
-  revalidatePath('/candidatures/flottement')
-  revalidatePath('/candidatures/incompletes')
+  // Pas de side-effect (email) à protéger ici, mais on garde la logique
+  // conditionnelle pour la cohérence avec qualifyCandidature.
+  if (updated && updated.length > 0) {
+    revalidatePath(`/offres/${cand.offre_id}`)
+    revalidatePath('/dashboard')
+    revalidatePath('/candidatures')
+    revalidatePath('/candidatures/flottement')
+    revalidatePath('/candidatures/incompletes')
+  }
   return { ok: true }
 }
