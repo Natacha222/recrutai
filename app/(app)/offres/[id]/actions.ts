@@ -252,25 +252,12 @@ export async function ingestCVs({
     return { ok: false, error: error.message }
   }
 
-  // Notification email pour chaque CV qualifié (≥ seuil).
-  // Priorité de destinataire :
-  //   1. Email de l'utilisateur authentifié — pratique en démo live,
-  //      chaque personne qui se connecte reçoit la notif dans sa
-  //      propre boîte plutôt qu'une adresse partagée hard-codée.
-  //   2. NOTIFICATION_EMAIL_OVERRIDE — fallback si user.email manque
-  //      (ex. session expirée entre-temps) ou pour forcer un email
-  //      fixe en CI.
-  //   3. clients.contact_email — destinataire production normal une
-  //      fois l'auth user et l'override désactivés.
+  // Notification email pour chaque CV qualifié (≥ seuil)
   const clientInfo = Array.isArray(offre.clients)
     ? offre.clients[0]
     : (offre.clients as { contact_email: string | null } | null)
-  const {
-    data: { user: notifUser },
-  } = await supabase.auth.getUser()
   const override = process.env.NOTIFICATION_EMAIL_OVERRIDE
-  const notifTo =
-    notifUser?.email || override || clientInfo?.contact_email || null
+  const notifTo = override || clientInfo?.contact_email || null
 
   const qualified = prepared.filter((p) => p.row.statut === 'qualifié')
   const notifErrors: string[] = []
@@ -279,7 +266,7 @@ export async function ingestCVs({
 
   if (!notifTo) {
     skippedReason =
-      "Aucune adresse de notification (user non authentifié, NOTIFICATION_EMAIL_OVERRIDE non défini et clients.contact_email manquant)."
+      "Aucune adresse de notification (NOTIFICATION_EMAIL_OVERRIDE non défini et clients.contact_email manquant)."
     console.warn(`[ingestCVs] ${skippedReason}`)
   } else if (!process.env.RESEND_API_KEY) {
     skippedReason = 'RESEND_API_KEY non défini côté serveur.'
@@ -379,25 +366,19 @@ export async function qualifyCandidature(
   revalidatePath(`/offres/${cand.offre_id}`)
   revalidatePath('/dashboard')
 
-  // Prépare l'envoi email — même priorité de destinataire que dans
-  // ingestCVs (user authentifié > override env > client) : cf. le
-  // commentaire plus haut.
+  // Prépare l'envoi email
   const clientInfo = Array.isArray(offre.clients)
     ? offre.clients[0]
     : (offre.clients as { contact_email: string | null } | null)
-  const {
-    data: { user: notifUser },
-  } = await supabase.auth.getUser()
   const override = process.env.NOTIFICATION_EMAIL_OVERRIDE
-  const notifTo =
-    notifUser?.email || override || clientInfo?.contact_email || null
+  const notifTo = override || clientInfo?.contact_email || null
 
   if (!notifTo) {
     return {
       ok: true,
       emailSent: false,
       skippedReason:
-        "Aucune adresse de notification (user non authentifié, NOTIFICATION_EMAIL_OVERRIDE non défini et clients.contact_email manquant).",
+        "Aucune adresse de notification (NOTIFICATION_EMAIL_OVERRIDE non défini et clients.contact_email manquant).",
     }
   }
   if (!process.env.RESEND_API_KEY) {

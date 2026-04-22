@@ -3,10 +3,9 @@ import { Resend } from 'resend'
 /**
  * Envoie une notification email quand un CV est qualifié par l'IA.
  *
- * Le destinataire (`to`) est choisi par l'appelant — cf. actions.ts
- * pour la priorité (user authentifié > NOTIFICATION_EMAIL_OVERRIDE >
- * clients.contact_email). En démo live, on envoie à l'user connecté
- * pour que chaque personne voie la notif dans sa propre boîte.
+ * En mode test, l'adresse destinataire est forcée via l'env
+ * NOTIFICATION_EMAIL_OVERRIDE (ex : n.magne@agoriade.fr).
+ * En production, on utilisera l'email du client de l'offre.
  *
  * From : "RecrutAI <onboarding@resend.dev>" par défaut. L'adresse technique
  * reste celle de Resend (seule `onboarding@resend.dev` est autorisée en
