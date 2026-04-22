@@ -9,12 +9,17 @@ type Status = 'idle' | 'uploading' | 'scoring' | 'done' | 'error'
 // Estimations de durée (en secondes) pour informer l'utilisateur. Ce sont
 // des ordres de grandeur observés :
 //   - upload Supabase : ~2s par PDF (réseau + taille fichier)
-//   - scoring IA : les appels Claude tournent en parallèle côté serveur,
-//     donc on considère une base fixe ~18s + un léger surcoût par CV
-//     additionnel (throttling, overhead download + insert)
+//   - scoring IA : côté serveur, on fait 1 appel séquentiel pour amorcer
+//     le cache de prompt Anthropic, puis on traite les CVs restants par
+//     lots de SCORING_CONCURRENCY en parallèle. Durée totale :
+//       1er CV (cache create) + ceil((n-1)/K) * temps d'un lot
+//     Les constantes reflètent des temps d'appel Claude observés :
+//       - ~15s pour un CV avec création de cache (1er appel)
+//       - ~18s par lot de K CVs en parallèle (cache hit, pic output)
 const UPLOAD_SEC_PER_FILE = 2
-const SCORING_BASE_SEC = 18
-const SCORING_EXTRA_SEC_PER_FILE = 2.5
+const SCORING_CONCURRENCY = 5
+const SCORING_FIRST_SEC = 15
+const SCORING_BATCH_SEC = 18
 
 // Durée d'affichage (en ms) du temps total réel après la fin de
 // l'ingestion. L'utilisateur le voit brièvement à titre indicatif puis
@@ -27,7 +32,9 @@ function estimateUploadSec(nFiles: number): number {
 
 function estimateScoringSec(nFiles: number): number {
   if (nFiles <= 0) return 0
-  return SCORING_BASE_SEC + (nFiles - 1) * SCORING_EXTRA_SEC_PER_FILE
+  if (nFiles === 1) return SCORING_FIRST_SEC
+  const batches = Math.ceil((nFiles - 1) / SCORING_CONCURRENCY)
+  return SCORING_FIRST_SEC + batches * SCORING_BATCH_SEC
 }
 
 function formatSec(s: number): string {
@@ -198,7 +205,7 @@ export default function CVUploader({
           <p className="text-sm text-muted">
             {disabled
               ? "Cette offre est clôturée. Réactive-la pour pouvoir joindre de nouveaux CVs."
-              : "Dépose un ou plusieurs fichiers PDF. Le scoring IA se lance automatiquement après l'upload (compter ~20s de traitement par lot)."}
+              : `Dépose un ou plusieurs fichiers PDF. Le scoring IA se lance automatiquement après l'upload. Compter ~${SCORING_FIRST_SEC}s pour 1 CV, ~${SCORING_FIRST_SEC + SCORING_BATCH_SEC}s pour 6 CVs, ~${SCORING_FIRST_SEC + 2 * SCORING_BATCH_SEC}s pour 11 CVs et ~${SCORING_FIRST_SEC + 4 * SCORING_BATCH_SEC}s pour 20 CVs.`}
           </p>
         </div>
 

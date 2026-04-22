@@ -255,18 +255,50 @@ export async function ingestCVs({
     }
   }
 
-  // On scorer le 1er CV de manière séquentielle pour AMORCER le cache de
-  // prompt d'Anthropic (l'offre + les instructions sont taguées
-  // cache_control: ephemeral dans scoreCandidate). Ensuite, les autres CVs
-  // partent en parallèle et bénéficient du cache : coût / 10 sur la portion
-  // d'offre, et pression sur la rate limit input tokens/min fortement
-  // réduite. Le cache est valide 5 minutes, largement assez pour un batch.
+  // Stratégie d'appel à l'IA pour respecter la rate limit (30k input tokens
+  // /min en Tier 1) :
+  //   1) On score le 1er CV tout seul pour AMORCER le cache de prompt
+  //      d'Anthropic (l'offre + les instructions sont taguées
+  //      cache_control: ephemeral dans scoreCandidate). Une fois ce 1er
+  //      appel terminé, le système a mis en cache ~5000 tokens d'offre,
+  //      et les appels suivants paient 10% du coût sur cette portion.
+  //   2) Ensuite, on traite les CVs restants par lots de SCORING_CONCURRENCY
+  //      via un pool de workers. Cela permet d'étaler la consommation de
+  //      tokens dans le temps et d'éviter le 429 quand on upload 20 CVs
+  //      d'un coup. Le cache est valide 5 minutes, largement assez.
+  const SCORING_CONCURRENCY = 5
+  async function mapLimit<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length)
+    let nextIndex = 0
+    async function worker() {
+      while (true) {
+        const i = nextIndex++
+        if (i >= items.length) return
+        results[i] = await fn(items[i])
+      }
+    }
+    const workers = Array.from(
+      { length: Math.min(limit, items.length) },
+      () => worker()
+    )
+    await Promise.all(workers)
+    return results
+  }
+
   let prepared: Prepared[]
   if (uploads.length <= 1) {
     prepared = await Promise.all(uploads.map(processUpload))
   } else {
     const first = await processUpload(uploads[0])
-    const rest = await Promise.all(uploads.slice(1).map(processUpload))
+    const rest = await mapLimit(
+      uploads.slice(1),
+      SCORING_CONCURRENCY,
+      processUpload
+    )
     prepared = [first, ...rest]
   }
 

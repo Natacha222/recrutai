@@ -34,6 +34,10 @@ export async function createOffre(formData: FormData) {
   // telle quelle (sans mise en majuscules) car les refs client sont parfois
   // sensibles à la casse côté ATS client.
   const reference = String(formData.get('reference') ?? '').trim() || null
+  // Chemin du PDF dans le bucket offres-pdf, renseigné uniquement si l'offre
+  // a été pré-remplie via « Importer un PDF ». NULL sinon → pas de bouton
+  // « Voir le PDF » sur la fiche.
+  const pdf_path = String(formData.get('pdf_path') ?? '').trim() || null
 
   if (!titre || !client_id || !lieu || !description || !date_validite) {
     return redirect(
@@ -70,6 +74,7 @@ export async function createOffre(formData: FormData) {
       date_validite,
       am_referent,
       reference,
+      pdf_path,
     })
     .select('id')
     .single()
@@ -89,6 +94,11 @@ export async function createOffre(formData: FormData) {
  * Reçoit un PDF d'offre d'emploi en FormData, appelle Claude pour extraire
  * les champs, puis essaie de matcher le client extrait avec un client
  * existant (match par nom, case-insensitive).
+ *
+ * Stocke également le PDF dans le bucket `offres-pdf` pour qu'on puisse
+ * le proposer en téléchargement depuis la fiche offre une fois créée.
+ * Le path est retourné et sera réémis par le formulaire via un champ
+ * hidden `pdf_path` → persistance dans `offres.pdf_path`.
  */
 export async function extractOffreAction(
   formData: FormData
@@ -97,6 +107,7 @@ export async function extractOffreAction(
       ok: true
       data: ExtractedOffre
       matchedClientId: string | null
+      pdfPath: string | null
     }
   | { ok: false; error: string }
 > {
@@ -117,8 +128,38 @@ export async function extractOffreAction(
   const result = await extractOffreFromPdfBuffer(buffer)
   if (!result.ok) return result
 
-  // Essaye de matcher le nom du client extrait avec un client existant
   const supabase = await createClient()
+
+  // Upload du PDF dans le bucket offres-pdf. L'offre n'existe pas encore
+  // à ce stade, donc on stocke sous `${userId}/${timestamp}-${nom}`. Si
+  // l'utilisateur abandonne le formulaire, l'objet reste orphelin — c'est
+  // acceptable en pratique (volume faible + on peut nettoyer a posteriori).
+  let pdfPath: string | null = null
+  try {
+    const { data: userRes } = await supabase.auth.getUser()
+    const userId = userRes.user?.id ?? 'anon'
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const candidatePath = `${userId}/${Date.now()}-${safeName}`
+    const { error: upErr } = await supabase.storage
+      .from('offres-pdf')
+      .upload(candidatePath, buffer, {
+        upsert: false,
+        contentType: 'application/pdf',
+      })
+    if (upErr) {
+      console.warn(
+        `[extractOffreAction] upload PDF échoué (on continue sans) : ${upErr.message}`
+      )
+    } else {
+      pdfPath = candidatePath
+    }
+  } catch (e) {
+    // L'upload est un bonus, pas un bloquant : on log et on continue.
+    const msg = e instanceof Error ? e.message : String(e)
+    console.warn(`[extractOffreAction] upload PDF exception : ${msg}`)
+  }
+
+  // Essaye de matcher le nom du client extrait avec un client existant
   const { data: clients } = await supabase.from('clients').select('id, nom')
 
   const normalize = (s: string) =>
@@ -134,6 +175,7 @@ export async function extractOffreAction(
     ok: true,
     data: result.data,
     matchedClientId: match?.id ?? null,
+    pdfPath,
   }
 }
 

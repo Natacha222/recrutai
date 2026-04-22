@@ -64,12 +64,25 @@ export default async function OffreDetailPage({
   const { data: offre } = await supabase
     .from('offres')
     .select(
-      'id, reference, titre, lieu, statut, seuil, date_validite, am_referent, clients(nom, secteur)'
+      'id, reference, titre, lieu, statut, seuil, date_validite, am_referent, pdf_path, clients(nom, secteur)'
     )
     .eq('id', id)
     .single()
 
   if (!offre) notFound()
+
+  // Si l'offre a été créée depuis un import PDF, on génère une URL signée
+  // courte durée (1h) pour afficher le bouton « Voir le PDF de l'offre ».
+  // L'URL signée n'est valable que le temps d'un rendu de page, c'est
+  // largement suffisant pour un clic ; le rafraîchissement de la page
+  // en génère une nouvelle.
+  let offrePdfUrl: string | null = null
+  if (offre.pdf_path) {
+    const { data: signed } = await supabase.storage
+      .from('offres-pdf')
+      .createSignedUrl(offre.pdf_path, 60 * 60)
+    offrePdfUrl = signed?.signedUrl ?? null
+  }
 
   const { data: candidatures } = await supabase
     .from('candidatures')
@@ -171,12 +184,24 @@ export default async function OffreDetailPage({
         <div className="flex items-center gap-3 flex-wrap mt-1">
           <h1 className="text-2xl font-bold">{offre.titre}</h1>
           <StatusBadge status={effectiveOffreStatut} />
-          <Link
-            href={`/offres/${offre.id}/modifier`}
-            className="ml-auto px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90"
-          >
-            Voir / modifier l&apos;offre
-          </Link>
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            {offrePdfUrl && (
+              <a
+                href={offrePdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 border-2 border-brand-purple text-brand-purple rounded-md text-sm font-semibold hover:bg-brand-purple hover:text-white transition-colors"
+              >
+                <span aria-hidden="true">📄</span> Voir le PDF de l&apos;offre
+              </a>
+            )}
+            <Link
+              href={`/offres/${offre.id}/modifier`}
+              className="px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90"
+            >
+              Voir / modifier l&apos;offre
+            </Link>
+          </div>
         </div>
       </div>
 

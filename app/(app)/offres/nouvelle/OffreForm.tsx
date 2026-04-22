@@ -1,6 +1,7 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import Link from 'next/link'
 import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
 import {
@@ -14,6 +15,19 @@ type Contrat = 'CDI' | 'CDD' | 'Alternance' | 'Stage'
 type ImportStatus = 'idle' | 'importing' | 'error' | 'success'
 
 const CONTRATS: Contrat[] = ['CDI', 'CDD', 'Alternance', 'Stage']
+
+// Durée estimée de l'extraction IA d'une offre depuis un PDF. L'appel
+// Claude tourne autour de 10–15s pour un PDF typique ; on utilise 12s
+// comme référence pour la barre de progression.
+const IMPORT_ESTIMATE_SEC = 12
+
+function formatSec(s: number): string {
+  const rounded = Math.max(0, Math.round(s))
+  if (rounded < 60) return `${rounded}s`
+  const m = Math.floor(rounded / 60)
+  const rest = rounded % 60
+  return rest === 0 ? `${m}min` : `${m}min${rest.toString().padStart(2, '0')}`
+}
 
 export default function OffreForm({
   clients: initialClients,
@@ -42,11 +56,27 @@ export default function OffreForm({
   // Par défaut, l'offre est attribuée au référent de l'utilisateur connecté.
   // Il peut changer si l'offre est enregistrée pour un collègue.
   const [amReferent, setAmReferent] = useState<string>(defaultReferent ?? '')
+  // Chemin du PDF dans le bucket offres-pdf après import réussi. Envoyé
+  // au server action via un champ hidden pour être persisté en base.
+  const [pdfPath, setPdfPath] = useState<string>('')
 
-  // État de l'import PDF
+  // État de l'import PDF + chrono pour la barre de progression.
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
   const [importMessage, setImportMessage] = useState('')
+  const [importElapsedSec, setImportElapsedSec] = useState(0)
+  const importStartRef = useRef<number>(0)
   const pdfInputRef = useRef<HTMLInputElement>(null)
+
+  // Tick toutes les 250ms pendant l'import pour alimenter la barre et le
+  // compteur. Se nettoie dès qu'on sort de l'état `importing`.
+  useEffect(() => {
+    if (importStatus !== 'importing') return
+    const tick = () =>
+      setImportElapsedSec((Date.now() - importStartRef.current) / 1000)
+    tick()
+    const id = setInterval(tick, 250)
+    return () => clearInterval(id)
+  }, [importStatus])
 
   // Client manquant : nom extrait qui ne matche aucun client existant
   const [missingClientName, setMissingClientName] = useState<string | null>(null)
@@ -66,8 +96,17 @@ export default function OffreForm({
       return
     }
 
-    setImportStatus('importing')
-    setImportMessage('')
+    // On force le flush synchronisé du changement de statut AVANT d'appeler
+    // le server action. Sans ça, React 19 peut agréger ces updates avec
+    // celles qui suivent le `await` dans une unique transition → l'état
+    // `importing` n'est jamais rendu et la barre de progression reste
+    // invisible. Avec flushSync, le DOM est mis à jour immédiatement.
+    importStartRef.current = Date.now()
+    flushSync(() => {
+      setImportElapsedSec(0)
+      setImportStatus('importing')
+      setImportMessage('')
+    })
 
     const formData = new FormData()
     formData.append('pdf', file)
@@ -87,6 +126,7 @@ export default function OffreForm({
     setContrat(result.data.contrat)
     setDescription(result.data.description)
     setReference(result.data.reference)
+    setPdfPath(result.pdfPath ?? '')
     // On n'accepte une date extraite que si elle est dans le futur, sinon
     // l'utilisateur serait bloqué au moment de valider.
     if (result.data.date_validite && result.data.date_validite >= today) {
@@ -108,6 +148,15 @@ export default function OffreForm({
         : `Champs remplis. Le client « ${result.data.client_nom} » n'existe pas encore — crée-le avant de valider.`
     )
   }
+
+  // Progression approximative pendant l'import : on plafonne à 95 % pour
+  // éviter la fausse complétion si l'appel déborde l'estimation.
+  const importProgressPct =
+    importStatus === 'importing'
+      ? Math.min(95, (importElapsedSec / IMPORT_ESTIMATE_SEC) * 100)
+      : 0
+  const importOverrun =
+    importStatus === 'importing' && importElapsedSec > IMPORT_ESTIMATE_SEC
 
   async function handleClientCreated(newClient: Client) {
     setClients((prev) =>
@@ -179,6 +228,37 @@ export default function OffreForm({
         </label>
       </div>
 
+      {importStatus === 'importing' && (
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-muted">
+              Analyse IA du PDF en cours…
+            </span>
+            <span className="text-muted text-xs font-mono tabular-nums">
+              {formatSec(importElapsedSec)} / ~{formatSec(IMPORT_ESTIMATE_SEC)}
+            </span>
+          </div>
+          <div
+            className="h-2 w-full bg-surface rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={Math.round(importProgressPct)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className="h-full bg-brand-purple transition-[width] duration-300 ease-out"
+              style={{ width: `${importProgressPct}%` }}
+            />
+          </div>
+          {importOverrun && (
+            <p className="text-xs text-muted">
+              L&apos;analyse prend un peu plus de temps que prévu, merci de
+              patienter…
+            </p>
+          )}
+        </div>
+      )}
+
       {importStatus === 'success' && importMessage && (
         <div className="mb-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
           {importMessage}
@@ -195,6 +275,11 @@ export default function OffreForm({
         action={createOffre}
         className="bg-surface-alt rounded-xl p-6 border border-border-soft space-y-4"
       >
+        {/* Chemin du PDF importé, renseigné uniquement si l'utilisateur a
+            utilisé « Importer un PDF ». Permet de stocker le path en base
+            pour pouvoir proposer « Voir le PDF » sur la fiche. */}
+        <input type="hidden" name="pdf_path" value={pdfPath} />
+
         <div>
           <label
             htmlFor="reference"
