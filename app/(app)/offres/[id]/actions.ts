@@ -56,17 +56,16 @@ export async function updateOffre(formData: FormData) {
       FIELD_LIMITS.am_referent
     )
   )
-  // Référence optionnelle : chaîne vide → NULL.
-  const reference =
-    truncate(
-      String(formData.get('reference') ?? ''),
-      FIELD_LIMITS.offre_reference
-    ).trim() || null
+  // Référence obligatoire (V25) — voir createOffre pour le rationale.
+  const reference = truncate(
+    String(formData.get('reference') ?? ''),
+    FIELD_LIMITS.offre_reference
+  ).trim()
 
   if (!id) return redirect('/offres?error=Offre+introuvable')
-  if (!titre || !client_id) {
+  if (!titre || !client_id || !reference) {
     return redirect(
-      `/offres/${id}/modifier?error=Le+titre+et+le+client+sont+obligatoires`
+      `/offres/${id}/modifier?error=Le+titre%2C+la+r%C3%A9f%C3%A9rence+et+le+client+sont+obligatoires`
     )
   }
   if (

@@ -55,20 +55,26 @@ export async function createOffre(formData: FormData) {
       FIELD_LIMITS.am_referent
     )
   )
-  // La référence est optionnelle : chaîne vide → NULL en base. On la stocke
-  // telle quelle (sans mise en majuscules) car les refs client sont parfois
-  // sensibles à la casse côté ATS client.
-  const reference =
-    truncate(
-      String(formData.get('reference') ?? ''),
-      FIELD_LIMITS.offre_reference
-    ).trim() || null
+  // La référence est obligatoire (V25) : une offre sans réf crée un flou
+  // administratif. On la stocke telle quelle (sans mise en majuscules) car
+  // les refs client sont parfois sensibles à la casse côté ATS client.
+  const reference = truncate(
+    String(formData.get('reference') ?? ''),
+    FIELD_LIMITS.offre_reference
+  ).trim()
   // Chemin du PDF dans le bucket offres-pdf, renseigné uniquement si l'offre
   // a été pré-remplie via « Importer un PDF ». NULL sinon → pas de bouton
   // « Voir le PDF » sur la fiche.
   const pdf_path = String(formData.get('pdf_path') ?? '').trim() || null
 
-  if (!titre || !client_id || !lieu || !description || !date_validite) {
+  if (
+    !titre ||
+    !client_id ||
+    !lieu ||
+    !description ||
+    !date_validite ||
+    !reference
+  ) {
     return redirect(
       '/offres/nouvelle?error=Tous+les+champs+sont+obligatoires'
     )

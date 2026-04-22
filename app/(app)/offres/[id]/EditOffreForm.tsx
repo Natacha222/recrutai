@@ -73,6 +73,7 @@ export default function EditOffreForm({
 
   const formIsValid =
     titre.trim() !== '' &&
+    reference.trim() !== '' &&
     clientId !== '' &&
     seuilIsValid &&
     dateFormatIsValid &&
@@ -87,12 +88,13 @@ export default function EditOffreForm({
           htmlFor="reference"
           className="block text-sm font-medium text-brand-indigo-text mb-1"
         >
-          Référence
+          Référence <span className="text-status-red">*</span>
         </label>
         <input
           id="reference"
           name="reference"
           type="text"
+          required
           value={reference}
           onChange={(e) => setReference(e.target.value)}
           placeholder="Ex : TECH-2026-018"
@@ -100,7 +102,7 @@ export default function EditOffreForm({
           className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
         />
         <p className="text-xs text-muted mt-1">
-          Référence attribuée par le client, optionnelle.
+          Référence attribuée par le client.
         </p>
       </div>
 
