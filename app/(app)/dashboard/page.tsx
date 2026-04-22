@@ -211,24 +211,32 @@ export default async function DashboardPage({
     return acc
   }, {} as Record<string, number>)
 
+  // URL vers la liste filtrée par statut. encodeURIComponent gère les
+  // accents de 'qualifié' / 'rejeté' et l'espace de 'en attente'.
+  const hrefFor = (s: string) =>
+    `/candidatures?statut=${encodeURIComponent(s)}`
+
   const statutSlices = [
     {
       key: 'qualifié',
       label: 'Qualifiés',
       count: statutCounts['qualifié'] ?? 0,
       color: 'var(--color-status-green)',
+      href: hrefFor('qualifié'),
     },
     {
       key: 'en attente',
       label: 'En attente',
       count: statutCounts['en attente'] ?? 0,
       color: 'var(--color-status-amber)',
+      href: hrefFor('en attente'),
     },
     {
       key: 'rejeté',
       label: 'Rejetés',
       count: statutCounts['rejeté'] ?? 0,
       color: 'var(--color-status-red)',
+      href: hrefFor('rejeté'),
     },
   ]
 

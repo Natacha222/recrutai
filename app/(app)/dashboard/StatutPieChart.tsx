@@ -1,9 +1,15 @@
+import Link from 'next/link'
+
 /**
- * Camembert SVG pur (server RSC, pas d'interactivité) pour la répartition
- * des statuts de candidature. On dessine chaque part comme un path SVG
- * (M → L → A → Z) à partir des fractions cumulées. Colors via les
- * variables CSS du thème (cf. app/globals.css) pour rester cohérent avec
- * les badges StatusBadge.
+ * Camembert SVG pur (server RSC) pour la répartition des statuts de
+ * candidature. On dessine chaque part comme un path SVG (M → L → A → Z)
+ * à partir des fractions cumulées. Colors via les variables CSS du
+ * thème (cf. app/globals.css) pour rester cohérent avec les badges
+ * StatusBadge.
+ *
+ * Interactivité : si un slice a un `href`, on wrap son path dans un
+ * <a xlink:href> (SVG standard, pas de JS) et l'item de légende devient
+ * un Link Next.js pour tirer parti du prefetch.
  */
 
 export type PieSlice = {
@@ -12,6 +18,8 @@ export type PieSlice = {
   count: number
   /** Couleur CSS (variable ou hex) passée directement en fill SVG. */
   color: string
+  /** Si défini, la part et l'item de légende deviennent cliquables. */
+  href?: string
 }
 
 type Props = {
@@ -39,17 +47,19 @@ export default function StatutPieChart({ slices }: Props) {
   // on dessine un cercle plein à la place.
   if (nonEmpty.length === 1) {
     const s = nonEmpty[0]
+    const circleEl = (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill={s.color}
+        aria-label={`${s.label} : 100 %`}
+        className={s.href ? 'cursor-pointer hover:opacity-90 transition-opacity' : undefined}
+      />
+    )
     return (
       <PieLayout
-        svg={
-          <circle
-            cx={cx}
-            cy={cy}
-            r={r}
-            fill={s.color}
-            aria-label={`${s.label} : 100 %`}
-          />
-        }
+        svg={s.href ? <a href={s.href}>{circleEl}</a> : circleEl}
         legend={[{ ...s, pct: 100 }]}
         total={total}
       />
@@ -85,11 +95,24 @@ export default function StatutPieChart({ slices }: Props) {
 
   return (
     <PieLayout
-      svg={paths.map((p) => (
-        <path key={p.key} d={p.d} fill={p.color}>
-          <title>{`${p.label} : ${p.count} (${Math.round(p.pct)} %)`}</title>
-        </path>
-      ))}
+      svg={paths.map((p) => {
+        const pathEl = (
+          <path
+            d={p.d}
+            fill={p.color}
+            className={p.href ? 'cursor-pointer hover:opacity-80 transition-opacity' : undefined}
+          >
+            <title>{`${p.label} : ${p.count} (${Math.round(p.pct)} %)${p.href ? ' — cliquer pour voir la liste' : ''}`}</title>
+          </path>
+        )
+        return p.href ? (
+          <a key={p.key} href={p.href} aria-label={`${p.label} : ${p.count}`}>
+            {pathEl}
+          </a>
+        ) : (
+          <g key={p.key}>{pathEl}</g>
+        )
+      })}
       legend={paths}
       total={total}
     />
@@ -102,7 +125,14 @@ function PieLayout({
   total,
 }: {
   svg: React.ReactNode
-  legend: Array<{ key: string; label: string; count: number; color: string; pct: number }>
+  legend: Array<{
+    key: string
+    label: string
+    count: number
+    color: string
+    pct: number
+    href?: string
+  }>
   total: number
 }) {
   return (
@@ -116,24 +146,39 @@ function PieLayout({
         {svg}
       </svg>
       <ul className="flex-1 w-full space-y-2">
-        {legend.map((s) => (
-          <li
-            key={s.key}
-            className="flex items-center justify-between text-sm gap-3"
-          >
-            <span className="flex items-center gap-2 min-w-0">
-              <span
-                className="inline-block w-3 h-3 rounded-sm shrink-0"
-                style={{ backgroundColor: s.color }}
-                aria-hidden
-              />
-              <span className="truncate">{s.label}</span>
-            </span>
-            <span className="text-muted tabular-nums shrink-0">
-              {s.count} ({Math.round(s.pct)}&nbsp;%)
-            </span>
-          </li>
-        ))}
+        {legend.map((s) => {
+          const inner = (
+            <>
+              <span className="flex items-center gap-2 min-w-0">
+                <span
+                  className="inline-block w-3 h-3 rounded-sm shrink-0"
+                  style={{ backgroundColor: s.color }}
+                  aria-hidden
+                />
+                <span className="truncate">{s.label}</span>
+              </span>
+              <span className="text-muted tabular-nums shrink-0">
+                {s.count} ({Math.round(s.pct)}&nbsp;%)
+              </span>
+            </>
+          )
+          return (
+            <li key={s.key}>
+              {s.href ? (
+                <Link
+                  href={s.href}
+                  className="flex items-center justify-between text-sm gap-3 px-2 py-1 -mx-2 rounded-md hover:bg-surface transition-colors"
+                >
+                  {inner}
+                </Link>
+              ) : (
+                <div className="flex items-center justify-between text-sm gap-3 px-2 py-1 -mx-2">
+                  {inner}
+                </div>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
