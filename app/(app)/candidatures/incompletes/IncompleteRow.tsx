@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
-import { updateCandidatureInfo } from './actions'
+import { updateCandidatureInfo, type UpdateCandidatureInfoResult } from './actions'
 
 type Props = {
   id: string
@@ -19,6 +19,16 @@ type Props = {
   offreReference: string | null
 }
 
+type Feedback =
+  | { kind: 'error'; text: string }
+  | { kind: 'success'; text: string }
+  | { kind: 'warning'; text: string }
+
+function feedbackFromResult(res: UpdateCandidatureInfoResult): Feedback {
+  if (!res.ok) return { kind: 'error', text: res.error }
+  return { kind: res.severity, text: res.message }
+}
+
 export default function IncompleteRow({
   id,
   initialNom,
@@ -32,19 +42,15 @@ export default function IncompleteRow({
 }: Props) {
   const [nom, setNom] = useState(initialNom)
   const [email, setEmail] = useState(emailIsPlaceholder ? '' : initialEmail)
-  const [error, setError] = useState('')
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError('')
+    setFeedback(null)
     startTransition(async () => {
       const res = await updateCandidatureInfo({ id, nom, email })
-      if (!res.ok) {
-        setError(res.error)
-      }
-      // Succès : on ne fait rien côté UI — la revalidation du path côté
-      // serveur va retirer cette ligne de la liste au prochain render.
+      setFeedback(feedbackFromResult(res))
     })
   }
 
@@ -56,6 +62,13 @@ export default function IncompleteRow({
         : scoreIa >= 50
           ? 'text-status-amber'
           : 'text-status-red'
+
+  const feedbackClass =
+    feedback?.kind === 'error'
+      ? 'bg-status-red-bg text-status-red'
+      : feedback?.kind === 'warning'
+        ? 'bg-status-amber-bg text-status-amber'
+        : 'bg-status-green-bg text-status-green'
 
   return (
     <tr className="text-sm align-top">
@@ -131,12 +144,23 @@ export default function IncompleteRow({
               disabled={isPending}
               className="px-4 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              {isPending ? 'Enregistrement…' : 'Enregistrer'}
+              {isPending ? 'Enregistrement + re-scoring…' : 'Enregistrer'}
             </button>
           </div>
         </form>
-        {error && (
-          <p className="mt-2 text-xs text-status-red">{error}</p>
+        {isPending && (
+          <p className="mt-2 text-xs text-muted">
+            Re-scoring du CV par l&apos;IA en cours (~15&nbsp;s). Si le nouveau
+            score atteint le seuil de l&apos;offre, un email est
+            automatiquement envoyé au client.
+          </p>
+        )}
+        {!isPending && feedback && (
+          <p
+            className={`mt-2 px-3 py-2 rounded-md text-xs ${feedbackClass}`}
+          >
+            {feedback.text}
+          </p>
         )}
       </td>
     </tr>

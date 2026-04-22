@@ -59,7 +59,9 @@ export default async function IncompletesPage() {
         <p className="text-sm text-muted mt-1">
           CV scorés pour lesquels l&apos;IA n&apos;a pas pu extraire un nom ou
           un email réel. Ouvre le PDF, relève les infos à la main, puis
-          enregistre.
+          enregistre : si l&apos;offre est toujours active, le CV est
+          re-scoré automatiquement et un email est envoyé au client si le
+          nouveau score atteint le seuil.
         </p>
       </div>
 
