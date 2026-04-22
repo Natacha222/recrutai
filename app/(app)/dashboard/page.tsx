@@ -288,7 +288,10 @@ export default async function DashboardPage() {
               Candidats à ±5 pts du seuil de leur offre
             </div>
           </div>
-          <div className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft">
+          <Link
+            href="/candidatures/incompletes"
+            className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft block hover:border-brand-purple hover:shadow-md transition-all"
+          >
             <div className="text-sm text-muted font-medium">
               Taux d&apos;incomplets
             </div>
@@ -296,9 +299,11 @@ export default async function DashboardPage() {
               {totalScored > 0 ? `${tauxIncomplets}\u00A0%` : '—'}
             </div>
             <div className="text-sm text-muted mt-1">
-              Nom ou email non extrait par l&apos;IA
+              {incompletsCount > 0
+                ? `${incompletsCount} CV${incompletsCount > 1 ? 's' : ''} à compléter →`
+                : "Nom ou email non extrait par l'IA"}
             </div>
-          </div>
+          </Link>
         </div>
       </section>
 
