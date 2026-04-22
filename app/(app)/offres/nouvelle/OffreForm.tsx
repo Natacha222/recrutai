@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import Link from 'next/link'
 import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
+import { FIELD_LIMITS } from '@/lib/validation'
 import {
   createOffre,
   extractOffreAction,
@@ -307,6 +308,7 @@ export default function OffreForm({
             value={reference}
             onChange={(e) => setReference(e.target.value)}
             placeholder="Ex : TECH-2026-018"
+            maxLength={FIELD_LIMITS.offre_reference}
             aria-describedby="reference_help"
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
@@ -330,6 +332,7 @@ export default function OffreForm({
             required
             value={titre}
             onChange={(e) => setTitre(e.target.value)}
+            maxLength={FIELD_LIMITS.offre_titre}
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>
@@ -424,6 +427,7 @@ export default function OffreForm({
               required
               value={lieu}
               onChange={(e) => setLieu(e.target.value)}
+              maxLength={FIELD_LIMITS.offre_lieu}
               className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
             />
           </div>
@@ -530,6 +534,7 @@ export default function OffreForm({
             required
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            maxLength={FIELD_LIMITS.offre_description}
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>
@@ -648,6 +653,7 @@ function CreateClientModal({
               // ne correspond plus forcément à l'état courant.
               if (error) setError('')
             }}
+            maxLength={FIELD_LIMITS.client_nom}
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>
@@ -660,6 +666,7 @@ function CreateClientModal({
             type="text"
             value={secteur}
             onChange={(e) => setSecteur(e.target.value)}
+            maxLength={FIELD_LIMITS.client_secteur}
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>
@@ -672,6 +679,7 @@ function CreateClientModal({
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            maxLength={FIELD_LIMITS.email}
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>

@@ -9,6 +9,7 @@ import {
   sendQualifiedCandidateEmail,
 } from '@/lib/email'
 import { effectiveStatut, formatReferent, todayIso } from '@/lib/format'
+import { FIELD_LIMITS, truncate } from '@/lib/validation'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 
@@ -25,10 +26,23 @@ export async function updateOffre(formData: FormData) {
   const supabase = await createClient()
 
   const id = String(formData.get('id') ?? '').trim()
-  const titre = String(formData.get('titre') ?? '').trim()
+  // Troncature défensive : protège contre un POST qui bypass le maxLength
+  // HTML. Limites centralisées dans lib/validation.ts.
+  const titre = truncate(
+    String(formData.get('titre') ?? ''),
+    FIELD_LIMITS.offre_titre
+  ).trim()
   const client_id = String(formData.get('client_id') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const lieu = String(formData.get('lieu') ?? '').trim() || null
+  const description =
+    truncate(
+      String(formData.get('description') ?? ''),
+      FIELD_LIMITS.offre_description
+    ).trim() || null
+  const lieu =
+    truncate(
+      String(formData.get('lieu') ?? ''),
+      FIELD_LIMITS.offre_lieu
+    ).trim() || null
   const contratRaw = String(formData.get('contrat') ?? '').trim()
   const contrat = CONTRATS.includes(contratRaw) ? contratRaw : 'CDI'
   const seuilRaw = Number(formData.get('seuil'))
@@ -37,10 +51,17 @@ export async function updateOffre(formData: FormData) {
     ? dateValiditeRaw
     : null
   const am_referent = formatReferent(
-    String(formData.get('am_referent') ?? '')
+    truncate(
+      String(formData.get('am_referent') ?? ''),
+      FIELD_LIMITS.am_referent
+    )
   )
   // Référence optionnelle : chaîne vide → NULL.
-  const reference = String(formData.get('reference') ?? '').trim() || null
+  const reference =
+    truncate(
+      String(formData.get('reference') ?? ''),
+      FIELD_LIMITS.offre_reference
+    ).trim() || null
 
   if (!id) return redirect('/offres?error=Offre+introuvable')
   if (!titre || !client_id) {

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { referentFromEmail } from '@/lib/format'
 import { getAvailableReferents } from '@/lib/referents'
+import { FIELD_LIMITS } from '@/lib/validation'
 import { createClientAction } from './actions'
 import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
 
@@ -52,9 +53,23 @@ export default async function NouveauClientPage({
         action={createClientAction}
         className="bg-surface-alt rounded-xl p-6 border border-border-soft space-y-4"
       >
-        <Field label="Nom de l'entreprise" name="nom" required />
-        <Field label="Secteur" name="secteur" />
-        <Field label="Email de notification" name="contact_email" type="email" />
+        <Field
+          label="Nom de l'entreprise"
+          name="nom"
+          required
+          maxLength={FIELD_LIMITS.client_nom}
+        />
+        <Field
+          label="Secteur"
+          name="secteur"
+          maxLength={FIELD_LIMITS.client_secteur}
+        />
+        <Field
+          label="Email de notification"
+          name="contact_email"
+          type="email"
+          maxLength={FIELD_LIMITS.email}
+        />
 
         <div>
           <label
@@ -124,12 +139,14 @@ function Field({
   type = 'text',
   required = false,
   placeholder,
+  maxLength,
 }: {
   label: string
   name: string
   type?: string
   required?: boolean
   placeholder?: string
+  maxLength?: number
 }) {
   return (
     <div>
@@ -145,6 +162,7 @@ function Field({
         type={type}
         required={required}
         placeholder={placeholder}
+        maxLength={maxLength}
         className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
       />
     </div>

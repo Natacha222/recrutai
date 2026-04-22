@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { FIELD_LIMITS } from '@/lib/validation'
 import { updateOffre } from './actions'
 
 type Client = { id: string; nom: string }
@@ -95,6 +96,7 @@ export default function EditOffreForm({
           value={reference}
           onChange={(e) => setReference(e.target.value)}
           placeholder="Ex : TECH-2026-018"
+          maxLength={FIELD_LIMITS.offre_reference}
           className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
         />
         <p className="text-xs text-muted mt-1">
@@ -116,6 +118,7 @@ export default function EditOffreForm({
           required
           value={titre}
           onChange={(e) => setTitre(e.target.value)}
+          maxLength={FIELD_LIMITS.offre_titre}
           className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
         />
       </div>
@@ -156,6 +159,7 @@ export default function EditOffreForm({
             type="text"
             value={lieu}
             onChange={(e) => setLieu(e.target.value)}
+            maxLength={FIELD_LIMITS.offre_lieu}
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>
@@ -295,6 +299,7 @@ export default function EditOffreForm({
           rows={6}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+          maxLength={FIELD_LIMITS.offre_description}
           className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
         />
       </div>

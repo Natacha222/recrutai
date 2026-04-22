@@ -8,6 +8,7 @@ import {
   type ExtractedOffre,
 } from '@/lib/offre-extraction'
 import { formatReferent, normalizeClientName, todayIso } from '@/lib/format'
+import { FIELD_LIMITS, truncate } from '@/lib/validation'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
@@ -23,10 +24,24 @@ const MAX_PDF_SIZE = 10 * 1024 * 1024
 export async function createOffre(formData: FormData) {
   const supabase = await createClient()
 
-  const titre = String(formData.get('titre') ?? '').trim()
+  // Troncature défensive sur tous les champs texte : protège contre un
+  // POST qui contournerait le maxLength HTML (paste monstrueux, attaque
+  // manuelle). Limites dans lib/validation.ts.
+  const titre = truncate(
+    String(formData.get('titre') ?? ''),
+    FIELD_LIMITS.offre_titre
+  ).trim()
   const client_id = String(formData.get('client_id') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const lieu = String(formData.get('lieu') ?? '').trim() || null
+  const description =
+    truncate(
+      String(formData.get('description') ?? ''),
+      FIELD_LIMITS.offre_description
+    ).trim() || null
+  const lieu =
+    truncate(
+      String(formData.get('lieu') ?? ''),
+      FIELD_LIMITS.offre_lieu
+    ).trim() || null
   const contratRaw = String(formData.get('contrat') ?? '').trim()
   const contrat = CONTRATS.includes(contratRaw) ? contratRaw : 'CDI'
   const seuilRaw = Number(formData.get('seuil'))
@@ -35,12 +50,19 @@ export async function createOffre(formData: FormData) {
     ? dateValiditeRaw
     : null
   const am_referent = formatReferent(
-    String(formData.get('am_referent') ?? '')
+    truncate(
+      String(formData.get('am_referent') ?? ''),
+      FIELD_LIMITS.am_referent
+    )
   )
   // La référence est optionnelle : chaîne vide → NULL en base. On la stocke
   // telle quelle (sans mise en majuscules) car les refs client sont parfois
   // sensibles à la casse côté ATS client.
-  const reference = String(formData.get('reference') ?? '').trim() || null
+  const reference =
+    truncate(
+      String(formData.get('reference') ?? ''),
+      FIELD_LIMITS.offre_reference
+    ).trim() || null
   // Chemin du PDF dans le bucket offres-pdf, renseigné uniquement si l'offre
   // a été pré-remplie via « Importer un PDF ». NULL sinon → pas de bouton
   // « Voir le PDF » sur la fiche.
@@ -209,11 +231,13 @@ export async function createClientInlineAction(input: {
 > {
   const supabase = await createClient()
 
-  const nom = input.nom.trim()
+  // Troncature défensive — voir createClientAction pour le rationale.
+  const nom = truncate(input.nom, FIELD_LIMITS.client_nom).trim()
   if (!nom) return { ok: false, error: 'Le nom du client est obligatoire.' }
 
-  // Détection de doublon : même logique que createClientAction, mais on
-  // retourne l'erreur pour l'afficher dans la modale (pas de redirect).
+  // Détection de doublon côté app : même logique que createClientAction,
+  // mais on retourne l'erreur pour l'afficher dans la modale (pas de
+  // redirect). L'index unique DB reste le vrai filet anti-race.
   const { data: existing } = await supabase.from('clients').select('nom')
   const targetNorm = normalizeClientName(nom)
   const duplicate = (existing ?? []).find(
@@ -229,10 +253,14 @@ export async function createClientInlineAction(input: {
     }
   }
 
-  const secteur = input.secteur?.trim() || null
-  const contact_email = input.contact_email?.trim() || null
+  const secteur =
+    truncate(input.secteur ?? '', FIELD_LIMITS.client_secteur).trim() || null
+  const contact_email =
+    truncate(input.contact_email ?? '', FIELD_LIMITS.email).trim() || null
   const formule = FORMULES.includes(input.formule) ? input.formule : 'Abonnement'
-  const am_referent = formatReferent(input.am_referent)
+  const am_referent = formatReferent(
+    truncate(input.am_referent ?? '', FIELD_LIMITS.am_referent)
+  )
 
   const { data, error } = await supabase
     .from('clients')
@@ -241,6 +269,16 @@ export async function createClientInlineAction(input: {
     .single()
 
   if (error || !data) {
+    // Code 23505 = race-condition sur l'index unique clients_nom_normalise_uniq.
+    // Message orienté modale : l'utilisateur doit fermer et recharger la
+    // liste des clients pour sélectionner celui que l'autre a créé.
+    if (error?.code === '23505') {
+      return {
+        ok: false,
+        error:
+          'Un client avec ce nom vient d\'être créé par un autre utilisateur. Ferme la modale et recharge la liste.',
+      }
+    }
     return { ok: false, error: error?.message ?? 'Erreur inconnue.' }
   }
 

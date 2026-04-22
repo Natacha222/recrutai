@@ -4,29 +4,48 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { formatReferent, normalizeClientName } from '@/lib/format'
+import { FIELD_LIMITS, truncate } from '@/lib/validation'
 
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
 
 export async function createClientAction(formData: FormData) {
   const supabase = await createClient()
 
-  const nom = String(formData.get('nom') ?? '').trim()
-  const secteur = String(formData.get('secteur') ?? '').trim() || null
+  // Troncature défensive : le `maxLength` côté HTML protège la saisie
+  // normale, mais un POST direct ou un paste monstrueux peuvent passer
+  // outre. On coupe AVANT le trim pour que trim finisse le boulot.
+  const nom = truncate(
+    String(formData.get('nom') ?? ''),
+    FIELD_LIMITS.client_nom
+  ).trim()
+  const secteur =
+    truncate(
+      String(formData.get('secteur') ?? ''),
+      FIELD_LIMITS.client_secteur
+    ).trim() || null
   const contact_email =
-    String(formData.get('contact_email') ?? '').trim() || null
+    truncate(
+      String(formData.get('contact_email') ?? ''),
+      FIELD_LIMITS.email
+    ).trim() || null
   const formuleRaw = String(formData.get('formule') ?? '').trim()
   const formule = FORMULES.includes(formuleRaw) ? formuleRaw : 'Abonnement'
   const am_referent = formatReferent(
-    String(formData.get('am_referent') ?? '')
+    truncate(
+      String(formData.get('am_referent') ?? ''),
+      FIELD_LIMITS.am_referent
+    )
   )
 
   if (!nom) {
     return redirect('/clients/nouveau?error=Le+nom+est+obligatoire')
   }
 
-  // Détection de doublon : compare le nom normalisé (casse/accents/espaces)
-  // avec les noms existants. On bloque la création pour forcer l'utilisateur
-  // à préciser ce qui différencie le nouveau client (filiale, ville, etc.).
+  // Détection de doublon côté app : compare le nom normalisé (casse/
+  // accents/espaces) avec les noms existants. L'index unique posé en DB
+  // (clients_nom_normalise_uniq) est le vrai filet de sécurité contre
+  // les races de concurrence — ce check pré-insert sert juste à produire
+  // un meilleur message d'erreur (avec le nom exact du client existant).
   const { data: existing } = await supabase.from('clients').select('nom')
   const targetNorm = normalizeClientName(nom)
   const duplicate = (existing ?? []).find(
@@ -47,6 +66,16 @@ export async function createClientAction(formData: FormData) {
     .single()
 
   if (error || !data) {
+    // Code 23505 = violation de contrainte unique. Se déclenche quand
+    // deux recruteurs créent le même client en parallèle et que le 2e
+    // INSERT perd la course (l'index clients_nom_normalise_uniq refuse).
+    // On ne connaît pas le nom exact qui conflit (l'index est fonctionnel)
+    // → message générique qui invite à recharger pour voir le doublon.
+    if (error?.code === '23505') {
+      const msg =
+        'Un client avec ce nom vient d\'être créé par un autre utilisateur. Recharge la liste pour le voir.'
+      return redirect(`/clients/nouveau?error=${encodeURIComponent(msg)}`)
+    }
     const message = error?.message ?? 'Erreur+inconnue'
     return redirect(`/clients/nouveau?error=${encodeURIComponent(message)}`)
   }

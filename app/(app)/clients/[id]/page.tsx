@@ -6,6 +6,7 @@ import StatusBadge from '@/components/StatusBadge'
 import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
 import { effectiveStatut, formatValidite, referentFromEmail } from '@/lib/format'
 import { getAvailableReferents } from '@/lib/referents'
+import { FIELD_LIMITS } from '@/lib/validation'
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ error?: string }>
@@ -94,17 +95,20 @@ export default async function ClientDetailPage({
           name="nom"
           defaultValue={client.nom}
           required
+          maxLength={FIELD_LIMITS.client_nom}
         />
         <Field
           label="Secteur"
           name="secteur"
           defaultValue={client.secteur ?? ''}
+          maxLength={FIELD_LIMITS.client_secteur}
         />
         <Field
           label="Email de notification"
           name="contact_email"
           type="email"
           defaultValue={client.contact_email ?? ''}
+          maxLength={FIELD_LIMITS.email}
         />
 
         <div>
@@ -224,6 +228,7 @@ function Field({
   defaultValue = '',
   required = false,
   placeholder,
+  maxLength,
 }: {
   label: string
   name: string
@@ -231,6 +236,7 @@ function Field({
   defaultValue?: string
   required?: boolean
   placeholder?: string
+  maxLength?: number
 }) {
   return (
     <div>
@@ -247,6 +253,7 @@ function Field({
         required={required}
         defaultValue={defaultValue}
         placeholder={placeholder}
+        maxLength={maxLength}
         className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
       />
     </div>
