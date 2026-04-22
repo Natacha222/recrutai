@@ -146,11 +146,11 @@ export default async function IncompletesPage({
           <table className="w-full">
             <thead className="bg-surface">
               <tr className="text-left text-xs font-semibold text-muted uppercase">
-                <th className="px-4 pt-3 pb-2">CV</th>
-                <th className="px-4 pt-3 pb-2">Offre</th>
-                <th className="px-4 pt-3 pb-2">Référent</th>
-                <th className="px-4 pt-3 pb-2">Score IA</th>
-                <th className="px-4 pt-3 pb-2" colSpan={2}>
+                <th scope="col" className="px-4 pt-3 pb-2">CV</th>
+                <th scope="col" className="px-4 pt-3 pb-2">Offre</th>
+                <th scope="col" className="px-4 pt-3 pb-2">Référent</th>
+                <th scope="col" className="px-4 pt-3 pb-2">Score IA</th>
+                <th scope="col" className="px-4 pt-3 pb-2" colSpan={2}>
                   Nom et email à corriger
                 </th>
               </tr>

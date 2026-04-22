@@ -209,22 +209,27 @@ export default function CVUploader({
           </p>
         </div>
 
+        {/* A11y : htmlFor + sr-only pour garder l'input focusable au
+            clavier. focus-within: rend le focus visible sur le label. */}
         <label
-          className={`inline-flex items-center gap-2 px-4 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold whitespace-nowrap ${
+          htmlFor="cv-upload-input"
+          className={`inline-flex items-center gap-2 px-4 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold whitespace-nowrap focus-within:ring-2 focus-within:ring-brand-purple focus-within:ring-offset-2 ${
             blocked
               ? 'opacity-60 cursor-not-allowed'
               : 'cursor-pointer hover:opacity-90'
           }`}
         >
-          <span>📎 Joindre des CVs</span>
+          <span aria-hidden="true">📎</span>
+          <span>Joindre des CVs</span>
           <input
+            id="cv-upload-input"
             ref={inputRef}
             type="file"
             accept="application/pdf"
             multiple
             disabled={blocked}
             onChange={(e) => handleFiles(e.target.files)}
-            className="hidden"
+            className="sr-only"
           />
         </label>
       </div>
@@ -232,7 +237,7 @@ export default function CVUploader({
       {isBusy && (
         <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-muted">
+            <span id="cv-upload-label" className="text-muted">
               {status === 'uploading'
                 ? `Upload ${progress.current}/${progress.total} fichier${
                     progress.total > 1 ? 's' : ''
@@ -252,6 +257,7 @@ export default function CVUploader({
             aria-valuenow={Math.round(phaseProgressPct)}
             aria-valuemin={0}
             aria-valuemax={100}
+            aria-labelledby="cv-upload-label"
           >
             <div
               className="h-full bg-brand-purple transition-[width] duration-300 ease-out"
@@ -267,26 +273,32 @@ export default function CVUploader({
         </div>
       )}
 
-      {status === 'done' && message && (
-        <div className="mt-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
-          <div>{message}</div>
-          {finalDurationSec !== null && (
-            <div className="mt-1 text-xs opacity-80">
-              Temps total : {formatSec(finalDurationSec)}
-            </div>
-          )}
-        </div>
-      )}
-      {status === 'error' && message && (
-        <div className="mt-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
-          <div>{message}</div>
-          {finalDurationSec !== null && (
-            <div className="mt-1 text-xs opacity-80">
-              Temps total : {formatSec(finalDurationSec)}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Live regions : succès annoncé en polite (n'interrompt pas), erreur
+          en assertive (interrompt — l'utilisateur doit savoir tout de suite). */}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {status === 'done' && message && (
+          <div className="mt-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
+            <div>{message}</div>
+            {finalDurationSec !== null && (
+              <div className="mt-1 text-xs opacity-80">
+                Temps total : {formatSec(finalDurationSec)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <div role="alert" aria-live="assertive" aria-atomic="true">
+        {status === 'error' && message && (
+          <div className="mt-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
+            <div>{message}</div>
+            {finalDurationSec !== null && (
+              <div className="mt-1 text-xs opacity-80">
+                Temps total : {formatSec(finalDurationSec)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

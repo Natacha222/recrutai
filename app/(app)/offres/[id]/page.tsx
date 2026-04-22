@@ -282,12 +282,12 @@ export default async function OffreDetailPage({
         <table className="w-full">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <th className="px-6 pt-3 pb-2">Candidat / Email</th>
-              <th className="px-6 pt-3 pb-2">Score IA</th>
-              <th className="px-6 pt-3 pb-2 w-1/3">Justification IA</th>
-              <th className="px-6 pt-3 pb-2">Statut</th>
-              <th className="px-6 pt-3 pb-2">Reçu le</th>
-              <th className="px-6 pt-3 pb-2">CV / Action</th>
+              <th scope="col" className="px-6 pt-3 pb-2">Candidat / Email</th>
+              <th scope="col" className="px-6 pt-3 pb-2">Score IA</th>
+              <th scope="col" className="px-6 pt-3 pb-2 w-1/3">Justification IA</th>
+              <th scope="col" className="px-6 pt-3 pb-2">Statut</th>
+              <th scope="col" className="px-6 pt-3 pb-2">Reçu le</th>
+              <th scope="col" className="px-6 pt-3 pb-2">CV / Action</th>
             </tr>
             <tr className="align-top">
               <th className="px-6 pt-0 pb-3 font-normal normal-case">

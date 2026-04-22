@@ -211,15 +211,15 @@ export default async function CandidaturesPage({
         <table className="w-full">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <th className="px-4 pt-3 pb-2">CV</th>
-              <th className="px-4 pt-3 pb-2">Candidat</th>
-              <th className="px-4 pt-3 pb-2">Score</th>
-              <th className="px-4 pt-3 pb-2">Statut</th>
-              <th className="px-4 pt-3 pb-2">Justification IA</th>
-              <th className="px-4 pt-3 pb-2">Offre</th>
-              <th className="px-4 pt-3 pb-2">Référent</th>
-              <th className="px-4 pt-3 pb-2">Date</th>
-              <th className="px-4 pt-3 pb-2">Action</th>
+              <th scope="col" className="px-4 pt-3 pb-2">CV</th>
+              <th scope="col" className="px-4 pt-3 pb-2">Candidat</th>
+              <th scope="col" className="px-4 pt-3 pb-2">Score</th>
+              <th scope="col" className="px-4 pt-3 pb-2">Statut</th>
+              <th scope="col" className="px-4 pt-3 pb-2">Justification IA</th>
+              <th scope="col" className="px-4 pt-3 pb-2">Offre</th>
+              <th scope="col" className="px-4 pt-3 pb-2">Référent</th>
+              <th scope="col" className="px-4 pt-3 pb-2">Date</th>
+              <th scope="col" className="px-4 pt-3 pb-2">Action</th>
             </tr>
             <tr className="align-top">
               <th className="px-4 pt-0 pb-3"></th>
@@ -285,7 +285,7 @@ export default async function CandidaturesPage({
                         <span aria-hidden="true">📄</span> CV
                       </a>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="text-muted" aria-label="Non renseigné">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 min-w-0">
@@ -354,7 +354,7 @@ export default async function CandidaturesPage({
                         )}
                       </>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="text-muted" aria-label="Non renseigné">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted whitespace-nowrap">

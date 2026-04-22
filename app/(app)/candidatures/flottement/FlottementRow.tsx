@@ -111,7 +111,9 @@ export default function FlottementRow({
             <span aria-hidden="true">📄</span> Voir le CV
           </a>
         ) : (
-          <span className="text-muted">—</span>
+          <span className="text-muted" aria-label="CV non disponible">
+            —
+          </span>
         )}
       </td>
       <td className="px-4 py-4 min-w-0">

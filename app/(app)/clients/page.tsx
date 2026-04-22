@@ -45,8 +45,19 @@ function SortableHeader({
 }) {
   const active = sort === sortKey
   const arrow = !active ? '↕' : dir === 'asc' ? '↑' : '↓'
+  // aria-sort : indique au lecteur d'écran la direction de tri active.
+  // 'none' par défaut (donc non-actif = triable mais pas trié).
+  const ariaSort: 'ascending' | 'descending' | 'none' = active
+    ? dir === 'asc'
+      ? 'ascending'
+      : 'descending'
+    : 'none'
   return (
-    <th className={`px-6 pt-3 pb-2 ${className}`}>
+    <th
+      scope="col"
+      aria-sort={ariaSort}
+      className={`px-6 pt-3 pb-2 ${className}`}
+    >
       <Link
         href={href}
         className={`inline-flex items-center gap-1 hover:text-brand-purple ${

@@ -205,25 +205,32 @@ export default function OffreForm({
     <>
       {/* En-tête : bouton d'import PDF compact */}
       <div className="flex items-start justify-end gap-4 flex-wrap mb-4">
+        {/* A11y : on utilise htmlFor + sr-only (au lieu de `hidden`) pour que
+            le `<input type="file">` reste focusable au clavier. Le label
+            montre un focus ring via `focus-within:` quand l'input caché a
+            le focus. */}
         <label
-          className={`inline-flex items-center gap-2 px-4 py-2 border-2 border-brand-purple text-brand-purple rounded-md text-sm font-semibold whitespace-nowrap ${
+          htmlFor="offre-pdf-import"
+          className={`inline-flex items-center gap-2 px-4 py-2 border-2 border-brand-purple text-brand-purple rounded-md text-sm font-semibold whitespace-nowrap focus-within:ring-2 focus-within:ring-brand-purple focus-within:ring-offset-2 ${
             importStatus === 'importing'
               ? 'opacity-60 cursor-not-allowed'
               : 'cursor-pointer hover:bg-brand-purple hover:text-white'
           }`}
         >
+          <span aria-hidden="true">📎</span>
           <span>
             {importStatus === 'importing'
               ? 'Analyse IA…'
-              : '📎 Importer un PDF'}
+              : 'Importer un PDF'}
           </span>
           <input
+            id="offre-pdf-import"
             ref={pdfInputRef}
             type="file"
             accept="application/pdf"
             disabled={importStatus === 'importing'}
             onChange={(e) => handlePdfImport(e.target.files)}
-            className="hidden"
+            className="sr-only"
           />
         </label>
       </div>
@@ -231,7 +238,7 @@ export default function OffreForm({
       {importStatus === 'importing' && (
         <div className="mb-4 space-y-2">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-muted">
+            <span id="offre-import-label" className="text-muted">
               Analyse IA du PDF en cours…
             </span>
             <span className="text-muted text-xs font-mono tabular-nums">
@@ -244,6 +251,7 @@ export default function OffreForm({
             aria-valuenow={Math.round(importProgressPct)}
             aria-valuemin={0}
             aria-valuemax={100}
+            aria-labelledby="offre-import-label"
           >
             <div
               className="h-full bg-brand-purple transition-[width] duration-300 ease-out"
@@ -259,16 +267,21 @@ export default function OffreForm({
         </div>
       )}
 
-      {importStatus === 'success' && importMessage && (
-        <div className="mb-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
-          {importMessage}
-        </div>
-      )}
-      {importStatus === 'error' && importMessage && (
-        <div className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
-          {importMessage}
-        </div>
-      )}
+      {/* Live regions : succès annoncé en polite, erreur en assertive. */}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {importStatus === 'success' && importMessage && (
+          <div className="mb-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
+            {importMessage}
+          </div>
+        )}
+      </div>
+      <div role="alert" aria-live="assertive" aria-atomic="true">
+        {importStatus === 'error' && importMessage && (
+          <div className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
+            {importMessage}
+          </div>
+        )}
+      </div>
 
       {/* Formulaire */}
       <form
@@ -294,9 +307,10 @@ export default function OffreForm({
             value={reference}
             onChange={(e) => setReference(e.target.value)}
             placeholder="Ex : TECH-2026-018"
+            aria-describedby="reference_help"
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
-          <p className="text-xs text-muted mt-1">
+          <p id="reference_help" className="text-xs text-muted mt-1">
             Référence attribuée par le client, optionnelle. Extraite
             automatiquement du PDF si présente.
           </p>

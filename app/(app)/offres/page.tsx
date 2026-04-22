@@ -68,8 +68,19 @@ function SortableHeader({
 }) {
   const active = sort === sortKey
   const arrow = !active ? '↕' : dir === 'asc' ? '↑' : '↓'
+  // aria-sort : indique au lecteur d'écran la direction de tri active.
+  // 'none' par défaut (donc non-actif = triable mais pas trié).
+  const ariaSort: 'ascending' | 'descending' | 'none' = active
+    ? dir === 'asc'
+      ? 'ascending'
+      : 'descending'
+    : 'none'
   return (
-    <th className={`px-6 pt-3 pb-2 ${className}`}>
+    <th
+      scope="col"
+      aria-sort={ariaSort}
+      className={`px-6 pt-3 pb-2 ${className}`}
+    >
       <Link
         href={href}
         className={`inline-flex items-center gap-1 hover:text-brand-purple ${
@@ -422,7 +433,7 @@ export default async function OffresPage({
                 className="text-sm hover:bg-surface transition align-top"
               >
                 <td className="px-6 py-5 font-mono font-semibold text-brand-purple tabular-nums whitespace-nowrap">
-                  {o.reference ?? <span className="text-muted">—</span>}
+                  {o.reference ?? <span className="text-muted" aria-label="Non renseigné">—</span>}
                 </td>
                 <td className="px-6 py-5">
                   <Link
@@ -433,8 +444,11 @@ export default async function OffresPage({
                   </Link>
                   {o.lieu && (
                     <div className="text-xs text-muted mt-1 flex items-center gap-1">
-                      <span>📍</span>
-                      <span>{o.lieu}</span>
+                      <span aria-hidden="true">📍</span>
+                      <span>
+                        <span className="sr-only">Lieu : </span>
+                        {o.lieu}
+                      </span>
                     </div>
                   )}
                 </td>

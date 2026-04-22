@@ -123,14 +123,20 @@ export default function TrancherActions({
           <span aria-hidden="true">↻</span> Relancer le scoring
         </button>
       )}
-      {isPending && (
-        <div className="text-xs text-muted">Enregistrement…</div>
-      )}
-      {!isPending && feedback && (
-        <div className={`text-xs px-2 py-1 rounded ${feedbackClass}`}>
-          {feedback.text}
-        </div>
-      )}
+      {/* Live region persistante : les utilisateurs de lecteur d'écran
+          reçoivent les feedbacks (« Enregistrement… », message succès /
+          erreur) dès qu'ils apparaissent. role="status" + aria-live=polite
+          = annonce sans interrompre la lecture en cours. */}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {isPending && (
+          <div className="text-xs text-muted">Enregistrement…</div>
+        )}
+        {!isPending && feedback && (
+          <div className={`text-xs px-2 py-1 rounded ${feedbackClass}`}>
+            {feedback.text}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

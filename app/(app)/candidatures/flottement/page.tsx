@@ -172,13 +172,13 @@ export default async function FlottementPage({
           <table className="w-full">
             <thead className="bg-surface">
               <tr className="text-left text-xs font-semibold text-muted uppercase">
-                <th className="px-4 pt-3 pb-2">CV</th>
-                <th className="px-4 pt-3 pb-2">Offre</th>
-                <th className="px-4 pt-3 pb-2">Référent</th>
-                <th className="px-4 pt-3 pb-2">Candidat</th>
-                <th className="px-4 pt-3 pb-2">Score / Seuil</th>
-                <th className="px-4 pt-3 pb-2 w-1/3">Justification IA</th>
-                <th className="px-4 pt-3 pb-2">Action</th>
+                <th scope="col" className="px-4 pt-3 pb-2">CV</th>
+                <th scope="col" className="px-4 pt-3 pb-2">Offre</th>
+                <th scope="col" className="px-4 pt-3 pb-2">Référent</th>
+                <th scope="col" className="px-4 pt-3 pb-2">Candidat</th>
+                <th scope="col" className="px-4 pt-3 pb-2">Score / Seuil</th>
+                <th scope="col" className="px-4 pt-3 pb-2 w-1/3">Justification IA</th>
+                <th scope="col" className="px-4 pt-3 pb-2">Action</th>
               </tr>
               <tr className="align-top">
                 <th className="px-4 pt-0 pb-3"></th>

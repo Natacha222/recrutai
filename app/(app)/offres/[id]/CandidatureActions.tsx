@@ -72,15 +72,19 @@ export default function CandidatureActions({
           <span aria-hidden="true">✗</span> Rejeter
         </button>
       </div>
-      {isPending && (
-        <div className="text-xs text-muted">Enregistrement…</div>
-      )}
-      {!isPending && status === 'success' && (
-        <div className="text-xs text-status-green">{message}</div>
-      )}
-      {!isPending && status === 'error' && (
-        <div className="text-xs text-status-red">{message}</div>
-      )}
+      {/* Live region : les feedbacks asynchrones (en cours, succès, erreur)
+          sont annoncés par les lecteurs d'écran sans interrompre. */}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {isPending && (
+          <div className="text-xs text-muted">Enregistrement…</div>
+        )}
+        {!isPending && status === 'success' && (
+          <div className="text-xs text-status-green">{message}</div>
+        )}
+        {!isPending && status === 'error' && (
+          <div className="text-xs text-status-red">{message}</div>
+        )}
+      </div>
     </div>
   )
 }
