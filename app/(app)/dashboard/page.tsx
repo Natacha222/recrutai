@@ -1,70 +1,269 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
+import { effectiveStatut, todayIso } from '@/lib/format'
+import StatutPieChart from './StatutPieChart'
+import EvolutionChart from './EvolutionChart'
+import PeriodSelector from './PeriodSelector'
+import {
+  resolvePeriod,
+  computeTimeseries,
+  type OffreForSeries,
+  type CandForSeries,
+} from './helpers'
 
 // Force le rendu dynamique : sinon Next.js peut servir une version cachée
 // du dashboard quand une candidature vient d'être ajoutée ou un statut de
 // changer, et l'utilisateur voit des données périmées.
 export const dynamic = 'force-dynamic'
 
-export default async function DashboardPage() {
+type SearchParams = Promise<{
+  /** Preset du graphique d'évolution : '7d' | '30d' | '12m' | 'custom'. */
+  evol?: string
+  /** Si evol=custom : date de début ISO YYYY-MM-DD. */
+  evol_from?: string
+  /** Si evol=custom : date de fin ISO YYYY-MM-DD. */
+  evol_to?: string
+}>
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: SearchParams
+}) {
+  const params = await searchParams
+  const period = resolvePeriod(params)
+
   const supabase = await createClient()
 
-  // nbOffres : offres au statut 'actif' uniquement, pour coller au label.
-  // nbCandidatures : candidatures liées à une offre active, via inner
-  // join sur offres + filtre offres.statut. On filtre les deux pour
-  // que la moyenne "Candidatures / offre" soit cohérente — sinon on
-  // divise un numérateur "all-time toutes offres" par un dénominateur
-  // "offres actives", ce qui gonfle artificiellement le chiffre.
-  const [{ count: nbOffres }, { count: nbCandidatures }] = await Promise.all([
+  // On bascule sur du fetch complet (offres + candidatures + clients) car
+  // on a besoin des rows brutes côté JS à la fois pour calculer les KPIs
+  // avec effectiveStatut (qui prend en compte date_validite) et pour
+  // construire la time series du graphique. Volume raisonnable tant qu'on
+  // reste sur quelques milliers de lignes ; à migrer en SQL agrégé si on
+  // dépasse.
+  const [offresRes, candidaturesRes, clientsRes] = await Promise.all([
     supabase
       .from('offres')
-      .select('*', { count: 'exact', head: true })
-      .eq('statut', 'actif'),
-    supabase
-      .from('candidatures')
-      .select('*, offres!inner(statut)', { count: 'exact', head: true })
-      .eq('offres.statut', 'actif'),
-  ])
-
-  const { count: nbQualifies } = await supabase
-    .from('candidatures')
-    .select('*', { count: 'exact', head: true })
-    .eq('statut', 'qualifié')
-
-  // Feed d'activités unifié : on fetch les 5 derniers objets créés dans
-  // chaque table principale (candidatures, clients, offres), on merge,
-  // on trie par created_at desc et on garde les 5 plus récents. Sans
-  // table d'audit log, c'est notre meilleure approximation d'un vrai
-  // fil d'activité — on ne capture que les créations, pas les
-  // changements de statut.
-  const [
-    { data: recentCandidatures },
-    { data: recentClients },
-    { data: recentOffres },
-  ] = await Promise.all([
+      .select('id, titre, created_at, date_validite, statut, client_id, clients(id, nom)')
+      .order('created_at', { ascending: false }),
     supabase
       .from('candidatures')
       .select(
-        'id, nom, email, score_ia, statut, created_at, offres(id, titre)'
+        'id, nom, email, score_ia, statut, offre_id, created_at, offres(id, titre, seuil, statut, date_validite)'
       )
-      .order('created_at', { ascending: false })
-      .limit(5),
+      .order('created_at', { ascending: false }),
     supabase
       .from('clients')
       .select('id, nom, created_at')
-      .order('created_at', { ascending: false })
-      .limit(5),
-    supabase
-      .from('offres')
-      .select('id, titre, created_at, clients(id, nom)')
-      .order('created_at', { ascending: false })
-      .limit(5),
+      .order('created_at', { ascending: false }),
   ])
+
+  type OffreRow = {
+    id: string
+    titre: string
+    created_at: string
+    date_validite: string | null
+    statut: string | null
+    client_id: string
+    clients: { id: string; nom: string } | { id: string; nom: string }[] | null
+  }
+
+  type CandidatureRow = {
+    id: string
+    nom: string | null
+    email: string | null
+    score_ia: number | null
+    statut: string | null
+    offre_id: string
+    created_at: string
+    offres:
+      | {
+          id: string
+          titre: string
+          seuil: number | null
+          statut: string | null
+          date_validite: string | null
+        }
+      | {
+          id: string
+          titre: string
+          seuil: number | null
+          statut: string | null
+          date_validite: string | null
+        }[]
+      | null
+  }
+
+  type ClientRow = {
+    id: string
+    nom: string
+    created_at: string
+  }
+
+  const offres = (offresRes.data ?? []) as OffreRow[]
+  const candidatures = (candidaturesRes.data ?? []) as CandidatureRow[]
+  const clients = (clientsRes.data ?? []) as ClientRow[]
+
+  // ---- KPIs
+  // Définition "active" = effectiveStatut (statut manuel + date_validite).
+  // On construit un Set pour tester vite l'appartenance des candidatures.
+  const offresActivesIds = new Set(
+    offres
+      .filter((o) => effectiveStatut(o.statut, o.date_validite) === 'actif')
+      .map((o) => o.id)
+  )
+  const nbOffresActives = offresActivesIds.size
+
+  // Candidatures liées à une offre actuellement active — base commune pour
+  // les 2 moyennes "par offre active".
+  const candidaturesSurActives = candidatures.filter((c) =>
+    offresActivesIds.has(c.offre_id)
+  )
+  const nbCandidaturesSurActives = candidaturesSurActives.length
+  const nbQualifiesSurActives = candidaturesSurActives.filter(
+    (c) => c.statut === 'qualifié'
+  ).length
+
+  const fmtMoyenne = (num: number, den: number) =>
+    den > 0 ? (num / den).toFixed(1).replace('.', ',') : '—'
+
+  const moyenneCandParOffreActive = fmtMoyenne(
+    nbCandidaturesSurActives,
+    nbOffresActives
+  )
+  const moyenneQualifiesParOffreActive = fmtMoyenne(
+    nbQualifiesSurActives,
+    nbOffresActives
+  )
+
+  const kpis = [
+    { label: 'Offres actives', value: nbOffresActives },
+    {
+      label: 'Candidatures / offre active',
+      value: moyenneCandParOffreActive,
+    },
+    {
+      label: 'Qualifiés / offre active',
+      value: moyenneQualifiesParOffreActive,
+    },
+  ]
+
+  // ---- Qualité IA : inchangée sauf qu'on réutilise le fetch candidatures
+  // Feature parity avec l'ancien dashboard : on calcule score moyen,
+  // flottement et incomplets à partir des candidatures scorées.
+  type QualiteIaRow = {
+    nom: string | null
+    email: string | null
+    score_ia: number | null
+    statut: string | null
+    offres_seuil: number | null
+  }
+
+  const qualiteIaRows: QualiteIaRow[] = candidatures.map((c) => {
+    const offre = Array.isArray(c.offres) ? c.offres[0] : c.offres
+    return {
+      nom: c.nom,
+      email: c.email,
+      score_ia: c.score_ia,
+      statut: c.statut,
+      offres_seuil: offre?.seuil ?? null,
+    }
+  })
+
+  const scored = qualiteIaRows.filter(
+    (c): c is QualiteIaRow & { score_ia: number } => c.score_ia !== null
+  )
+  const totalScored = scored.length
+
+  const scoreMoyen =
+    totalScored > 0
+      ? Math.round(
+          scored.reduce((sum, c) => sum + c.score_ia, 0) / totalScored
+        )
+      : 0
+
+  // Taux de flottement — cohérent avec /candidatures/flottement :
+  // score ±5 du seuil ET statut encore en attente (qualifié/rejeté exclus).
+  const flottementCount = scored.filter((c) => {
+    if (c.statut === 'qualifié' || c.statut === 'rejeté') return false
+    const seuil = c.offres_seuil ?? 60
+    return Math.abs(c.score_ia - seuil) <= 5
+  }).length
+  const tauxFlottement =
+    totalScored > 0 ? Math.round((flottementCount / totalScored) * 100) : 0
+
+  const incompletsCount = scored.filter((c) => {
+    const hasNom = !!c.nom?.trim()
+    const hasEmail =
+      !!c.email?.trim() && !c.email.endsWith('@example.com')
+    return !hasNom || !hasEmail
+  }).length
+  const tauxIncomplets =
+    totalScored > 0 ? Math.round((incompletsCount / totalScored) * 100) : 0
+
+  // ---- Répartition par statut (pie chart)
+  const statutCounts = scored.reduce((acc, c) => {
+    const s = c.statut ?? 'en attente'
+    acc[s] = (acc[s] ?? 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
+  const statutSlices = [
+    {
+      key: 'qualifié',
+      label: 'Qualifiés',
+      count: statutCounts['qualifié'] ?? 0,
+      color: 'var(--color-status-green)',
+    },
+    {
+      key: 'en attente',
+      label: 'En attente',
+      count: statutCounts['en attente'] ?? 0,
+      color: 'var(--color-status-amber)',
+    },
+    {
+      key: 'rejeté',
+      label: 'Rejetés',
+      count: statutCounts['rejeté'] ?? 0,
+      color: 'var(--color-status-red)',
+    },
+  ]
+
+  // ---- Time series pour le graphique d'évolution
+  const offresForSeries: OffreForSeries[] = offres.map((o) => ({
+    id: o.id,
+    created_at: o.created_at,
+    date_validite: o.date_validite,
+    statut: o.statut,
+    client_id: o.client_id,
+  }))
+  const candForSeries: CandForSeries[] = candidatures.map((c) => ({
+    id: c.id,
+    created_at: c.created_at,
+    statut: c.statut,
+  }))
+  const timeseries = computeTimeseries(period, offresForSeries, candForSeries)
+
+  // Totaux flux sur la période (affichés à côté du chart)
+  const candidaturesSurPeriode = candidatures.filter((c) => {
+    const d = new Date(c.created_at)
+    return d >= period.from && d <= endOfDay(period.to)
+  })
+  const nbCandSurPeriode = candidaturesSurPeriode.length
+  const nbQualifiesSurPeriode = candidaturesSurPeriode.filter(
+    (c) => c.statut === 'qualifié'
+  ).length
+
+  // ---- Activité récente : 5 derniers événements (candidatures, clients,
+  // offres) fusionnés puis triés desc. Sans audit log on ne capture que
+  // les créations.
+  const recentCandidatures = candidatures.slice(0, 5)
+  const recentClients = clients.slice(0, 5)
+  const recentOffres = offres.slice(0, 5)
 
   type OffreRef = { id: string; titre: string } | null
   type ClientRef = { id: string; nom: string } | null
-
   type Activite =
     | {
         type: 'candidature'
@@ -91,7 +290,7 @@ export default async function DashboardPage() {
       }
 
   const activites: Activite[] = [
-    ...(recentCandidatures ?? []).map((c): Activite => {
+    ...recentCandidatures.map((c): Activite => {
       const offreInfo = (Array.isArray(c.offres)
         ? c.offres[0]
         : c.offres) as OffreRef
@@ -106,7 +305,7 @@ export default async function DashboardPage() {
         createdAt: c.created_at,
       }
     }),
-    ...(recentClients ?? []).map(
+    ...recentClients.map(
       (c): Activite => ({
         type: 'client',
         id: c.id,
@@ -114,7 +313,7 @@ export default async function DashboardPage() {
         createdAt: c.created_at,
       })
     ),
-    ...(recentOffres ?? []).map((o): Activite => {
+    ...recentOffres.map((o): Activite => {
       const clientInfo = (Array.isArray(o.clients)
         ? o.clients[0]
         : o.clients) as ClientRef
@@ -133,107 +332,6 @@ export default async function DashboardPage() {
     )
     .slice(0, 5)
 
-  // Qualité IA : on fetch toutes les candidatures scorées avec le seuil de
-  // leur offre pour calculer des indicateurs globaux sur la qualité du
-  // scoring (score moyen, flottement autour du seuil, taux d'extraction
-  // nom/email). L'agrégation est faite en JS côté serveur : acceptable
-  // tant que le volume reste raisonnable. À basculer en SQL agrégé si on
-  // dépasse quelques milliers de candidatures.
-  const { data: qualiteIaRows } = await supabase
-    .from('candidatures')
-    .select('nom, email, score_ia, statut, offres(seuil)')
-
-  type QualiteIaRow = {
-    nom: string | null
-    email: string | null
-    score_ia: number | null
-    statut: string | null
-    offres:
-      | { seuil: number | null }
-      | { seuil: number | null }[]
-      | null
-  }
-
-  const scored = ((qualiteIaRows ?? []) as QualiteIaRow[]).filter(
-    (c): c is QualiteIaRow & { score_ia: number } => c.score_ia !== null
-  )
-  const totalScored = scored.length
-
-  const scoreMoyen =
-    totalScored > 0
-      ? Math.round(
-          scored.reduce((sum, c) => sum + c.score_ia, 0) / totalScored
-        )
-      : 0
-
-  // Taux de flottement : % de candidats dont le score est à ±5 points du
-  // seuil de leur offre (fenêtre de "candidats limites" qui aident l'AM
-  // à conseiller le client sur le réglage du curseur). On exclut les
-  // qualifié/rejeté qui ont déjà été tranchés — le chiffre doit coller
-  // à la liste /candidatures/flottement (qui applique le même filtre).
-  const flottementCount = scored.filter((c) => {
-    if (c.statut === 'qualifié' || c.statut === 'rejeté') return false
-    const offre = Array.isArray(c.offres) ? c.offres[0] : c.offres
-    const seuil = offre?.seuil ?? 60
-    return Math.abs(c.score_ia - seuil) <= 5
-  }).length
-  const tauxFlottement =
-    totalScored > 0
-      ? Math.round((flottementCount / totalScored) * 100)
-      : 0
-
-  // Taux d'incomplets : parmi les CV scorés par l'IA, % pour lesquels
-  // Claude n'a pas extrait de nom ou d'email réel (les emails placeholder
-  // se terminent par @example.com, cf. lib/email.ts).
-  const incompletsCount = scored.filter((c) => {
-    const hasNom = !!c.nom?.trim()
-    const hasEmail =
-      !!c.email?.trim() && !c.email.endsWith('@example.com')
-    return !hasNom || !hasEmail
-  }).length
-  const tauxIncomplets =
-    totalScored > 0
-      ? Math.round((incompletsCount / totalScored) * 100)
-      : 0
-
-  // Répartition par statut sur l'ensemble des candidatures scorées : barre
-  // empilée verte/ambre/rouge pour voir en un coup d'œil la proportion de
-  // qualifiés / en attente / rejetés. On filtre les statuts vides pour ne
-  // pas afficher de segment 0.
-  const statutCounts = scored.reduce((acc, c) => {
-    const s = c.statut ?? 'en attente'
-    acc[s] = (acc[s] ?? 0) + 1
-    return acc
-  }, {} as Record<string, number>)
-
-  const statutOrder: Array<{
-    key: string
-    label: string
-    className: string
-  }> = [
-    { key: 'qualifié', label: 'Qualifiés', className: 'bg-status-green' },
-    { key: 'en attente', label: 'En attente', className: 'bg-status-amber' },
-    { key: 'rejeté', label: 'Rejetés', className: 'bg-status-red' },
-  ]
-  const statutBreakdown = statutOrder
-    .map((s) => ({ ...s, count: statutCounts[s.key] ?? 0 }))
-    .filter((s) => s.count > 0)
-  const totalStatut = statutBreakdown.reduce((s, x) => s + x.count, 0)
-
-  // Moyenne de candidatures par offre : nb CV / nb offres, arrondie à
-  // 1 décimale et formatée avec virgule (norme française). Tombe sur
-  // '—' si aucune offre pour éviter une division par zéro.
-  const moyenneCandidaturesParOffre =
-    nbOffres && nbOffres > 0
-      ? ((nbCandidatures ?? 0) / nbOffres).toFixed(1).replace('.', ',')
-      : '—'
-
-  const kpis = [
-    { label: 'Offres actives', value: nbOffres ?? 0 },
-    { label: 'Candidatures / offre', value: moyenneCandidaturesParOffre },
-    { label: 'Candidats qualifiés', value: nbQualifies ?? 0 },
-  ]
-
   const fmtDate = (iso: string) => {
     const d = new Date(iso)
     const jj = String(d.getDate()).padStart(2, '0')
@@ -242,18 +340,20 @@ export default async function DashboardPage() {
     return `${jj}/${mm}/${aaaa}`
   }
 
+  const todayForInput = todayIso()
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <h1 className="text-2xl font-bold">Dashboard</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {kpis.map((k) => (
           <div
             key={k.label}
-            className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft"
+            className="bg-surface-alt rounded-lg px-4 py-2.5 shadow-sm border border-border-soft"
           >
-            <div className="text-sm text-muted font-medium">{k.label}</div>
-            <div className="text-3xl font-bold text-brand-indigo-text mt-1">
+            <div className="text-xs text-muted font-medium">{k.label}</div>
+            <div className="text-2xl font-bold text-brand-indigo-text leading-tight">
               {k.value}
             </div>
           </div>
@@ -262,124 +362,124 @@ export default async function DashboardPage() {
 
       {/* Qualité IA — indicateurs sur le comportement du scoring */}
       <section aria-labelledby="qualite-ia-heading">
-        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
-          <h2 id="qualite-ia-heading" className="text-lg font-semibold">
+        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-2">
+          <h2 id="qualite-ia-heading" className="text-base font-semibold">
             Qualité IA
           </h2>
-          <p className="text-sm text-muted">
+          <p className="text-xs text-muted">
             Comment l&apos;IA se comporte sur tes flux de CV
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft">
-            <div className="text-sm text-muted font-medium">Score moyen</div>
-            <div className="text-3xl font-bold text-brand-indigo-text mt-1">
-              {totalScored > 0 ? scoreMoyen : '—'}
-            </div>
-            <div className="text-sm text-muted mt-1">
-              sur {totalScored} CV scoré{totalScored > 1 ? 's' : ''}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="bg-surface-alt rounded-lg px-4 py-2.5 shadow-sm border border-border-soft">
+            <div className="text-xs text-muted font-medium">Score moyen</div>
+            <div className="flex items-baseline gap-2 leading-tight">
+              <span className="text-2xl font-bold text-brand-indigo-text">
+                {totalScored > 0 ? scoreMoyen : '—'}
+              </span>
+              <span className="text-xs text-muted">
+                sur {totalScored} CV{totalScored > 1 ? 's' : ''}
+              </span>
             </div>
           </div>
           <Link
             href="/candidatures/flottement"
-            className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft block hover:border-brand-purple hover:shadow-md transition-all"
+            className="bg-surface-alt rounded-lg px-4 py-2.5 shadow-sm border border-border-soft block hover:border-brand-purple hover:shadow-md transition-all"
           >
-            <div className="text-sm text-muted font-medium">
+            <div className="text-xs text-muted font-medium">
               Taux de flottement
             </div>
-            <div className="text-3xl font-bold text-brand-indigo-text mt-1">
-              {totalScored > 0 ? `${tauxFlottement}\u00A0%` : '—'}
-            </div>
-            <div className="text-sm text-muted mt-1">
-              {flottementCount > 0
-                ? `${flottementCount} CV${flottementCount > 1 ? 's' : ''} à trancher →`
-                : 'Candidats à ±5 pts du seuil de leur offre'}
+            <div className="flex items-baseline gap-2 leading-tight">
+              <span className="text-2xl font-bold text-brand-indigo-text">
+                {totalScored > 0 ? `${tauxFlottement}\u00A0%` : '—'}
+              </span>
+              <span className="text-xs text-muted">
+                {flottementCount > 0
+                  ? `${flottementCount} à trancher →`
+                  : '±5 pts du seuil'}
+              </span>
             </div>
           </Link>
           <Link
             href="/candidatures/incompletes"
-            className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft block hover:border-brand-purple hover:shadow-md transition-all"
+            className="bg-surface-alt rounded-lg px-4 py-2.5 shadow-sm border border-border-soft block hover:border-brand-purple hover:shadow-md transition-all"
           >
-            <div className="text-sm text-muted font-medium">
+            <div className="text-xs text-muted font-medium">
               Taux d&apos;incomplets
             </div>
-            <div className="text-3xl font-bold text-brand-indigo-text mt-1">
-              {totalScored > 0 ? `${tauxIncomplets}\u00A0%` : '—'}
-            </div>
-            <div className="text-sm text-muted mt-1">
-              {incompletsCount > 0
-                ? `${incompletsCount} CV${incompletsCount > 1 ? 's' : ''} à compléter →`
-                : "Nom ou email non extrait par l'IA"}
+            <div className="flex items-baseline gap-2 leading-tight">
+              <span className="text-2xl font-bold text-brand-indigo-text">
+                {totalScored > 0 ? `${tauxIncomplets}\u00A0%` : '—'}
+              </span>
+              <span className="text-xs text-muted">
+                {incompletsCount > 0
+                  ? `${incompletsCount} à compléter →`
+                  : 'nom ou email manquant'}
+              </span>
             </div>
           </Link>
         </div>
       </section>
 
-      {/* Répartition des candidatures — barre empilée pleine largeur +
-          légende. Fallback accessible via role="img" + aria-label. */}
-      <section aria-labelledby="repartition-heading">
-        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
-          <h2
-            id="repartition-heading"
-            className="text-lg font-semibold"
-          >
-            Répartition des candidatures
-          </h2>
-          <p className="text-sm text-muted">
-            Vue globale des statuts sur l&apos;ensemble des CV scorés
-          </p>
-        </div>
-        <div className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft">
-          {totalStatut > 0 ? (
-            <>
-              <div
-                className="flex h-8 rounded-md overflow-hidden"
-                role="img"
-                aria-label={`Répartition de ${totalStatut} candidature${totalStatut > 1 ? 's' : ''} par statut`}
-              >
-                {statutBreakdown.map((s) => {
-                  const pct = (s.count / totalStatut) * 100
-                  return (
-                    <div
-                      key={s.key}
-                      className={`${s.className} flex items-center justify-center text-white text-xs font-semibold`}
-                      style={{ width: `${pct}%` }}
-                      title={`${s.label}\u00A0: ${s.count} (${Math.round(pct)}\u00A0%)`}
-                    >
-                      {pct >= 10 ? `${Math.round(pct)}\u00A0%` : ''}
-                    </div>
-                  )
-                })}
-              </div>
-              <ul className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {statutBreakdown.map((s) => (
-                  <li
-                    key={s.key}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={`inline-block w-3 h-3 rounded-sm ${s.className}`}
-                        aria-hidden
-                      />
-                      <span>{s.label}</span>
-                    </span>
-                    <span className="text-muted tabular-nums">
-                      {s.count} (
-                      {Math.round((s.count / totalStatut) * 100)}
-                      {'\u00A0%'})
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <p className="text-sm text-muted py-8 text-center">
-              Aucune donnée pour le moment.
+      {/* Évolution + Répartition — côte à côte en 2 colonnes sur grand
+          écran, empilés sur mobile. Hauteurs homogènes via items-stretch
+          par défaut de grid. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <section
+          aria-labelledby="evolution-heading"
+          className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft space-y-3"
+        >
+          <div>
+            <h2 id="evolution-heading" className="text-lg font-semibold">
+              Évolution
+            </h2>
+            <p className="text-sm text-muted mt-0.5">{period.label}</p>
+          </div>
+          <PeriodSelector
+            currentKey={period.presetKey}
+            currentFrom={params.evol_from}
+            currentTo={params.evol_to}
+            todayIso={todayForInput}
+          />
+          <EvolutionChart points={timeseries} periodLabel={period.label} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border-soft">
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl font-bold text-brand-indigo-text tabular-nums">
+                {nbCandSurPeriode}
+              </span>
+              <span className="text-xs text-muted">
+                candidature{nbCandSurPeriode > 1 ? 's' : ''} reçue
+                {nbCandSurPeriode > 1 ? 's' : ''} sur la période
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl font-bold text-status-green tabular-nums">
+                {nbQualifiesSurPeriode}
+              </span>
+              <span className="text-xs text-muted">
+                qualifié{nbQualifiesSurPeriode > 1 ? 's' : ''} sur la période
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="repartition-heading"
+          className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft flex flex-col"
+        >
+          <div className="mb-3">
+            <h2 id="repartition-heading" className="text-lg font-semibold">
+              Répartition des candidatures
+            </h2>
+            <p className="text-sm text-muted mt-0.5">
+              Statuts sur l&apos;ensemble des CV scorés
             </p>
-          )}
-        </div>
-      </section>
+          </div>
+          <div className="flex-1 flex items-center">
+            <StatutPieChart slices={statutSlices} />
+          </div>
+        </section>
+      </div>
 
       {/* Activité récente — feed unifié : nouveaux clients, nouvelles
           offres, nouvelles candidatures. Triés par created_at desc,
@@ -502,4 +602,11 @@ export default async function DashboardPage() {
       </div>
     </div>
   )
+}
+
+/** Fin de journée locale pour inclure les candidatures du dernier jour. */
+function endOfDay(d: Date): Date {
+  const out = new Date(d)
+  out.setHours(23, 59, 59, 999)
+  return out
 }

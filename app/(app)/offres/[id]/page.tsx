@@ -11,7 +11,6 @@ import {
 } from '@/components/TableFilters'
 import CVUploader from './CVUploader'
 import CandidatureActions from './CandidatureActions'
-import DeleteAllCandidaturesButton from './DeleteAllCandidaturesButton'
 
 type CandidatureFilter = 'qualifié' | 'en attente' | 'rejeté'
 const FILTERS: CandidatureFilter[] = ['qualifié', 'en attente', 'rejeté']
@@ -278,12 +277,7 @@ export default async function OffreDetailPage({
                 } sur ${total}`
               : `Candidatures reçues (${total})`}
           </h2>
-          <div className="flex items-center gap-3 flex-wrap">
-            <FiltersReset fields={CAND_FILTER_FIELDS} />
-            {!hasCandFilter && (
-              <DeleteAllCandidaturesButton offreId={offre.id} total={total} />
-            )}
-          </div>
+          <FiltersReset fields={CAND_FILTER_FIELDS} />
         </div>
         <table className="w-full">
           <thead className="bg-surface">
