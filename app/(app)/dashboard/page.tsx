@@ -168,8 +168,11 @@ export default async function DashboardPage() {
 
   // Taux de flottement : % de candidats dont le score est à ±5 points du
   // seuil de leur offre (fenêtre de "candidats limites" qui aident l'AM
-  // à conseiller le client sur le réglage du curseur).
+  // à conseiller le client sur le réglage du curseur). On exclut les
+  // qualifié/rejeté qui ont déjà été tranchés — le chiffre doit coller
+  // à la liste /candidatures/flottement (qui applique le même filtre).
   const flottementCount = scored.filter((c) => {
+    if (c.statut === 'qualifié' || c.statut === 'rejeté') return false
     const offre = Array.isArray(c.offres) ? c.offres[0] : c.offres
     const seuil = offre?.seuil ?? 60
     return Math.abs(c.score_ia - seuil) <= 5

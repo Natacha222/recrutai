@@ -101,6 +101,11 @@ export default async function FlottementPage({
     })
     .filter((c) => c._offre !== null)
     .filter((c) => Math.abs(c._score - c._offre!.seuil) <= FLOTTEMENT_WIDTH)
+    // On ne montre que les candidatures qui attendent encore une décision :
+    // les « qualifié » et « rejeté » (automatiquement ou manuellement) ont
+    // déjà été tranchés et ne doivent plus polluer la liste. Garde la
+    // cohérence avec le KPI du dashboard qui utilise la même logique.
+    .filter((c) => c.statut !== 'qualifié' && c.statut !== 'rejeté')
 
   // Liste des référents distincts dans la sélection (avant filtre).
   const amReferents = Array.from(

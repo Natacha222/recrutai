@@ -407,7 +407,9 @@ export async function qualifyCandidature(
 
   const { data: offre, error: offreErr } = await supabase
     .from('offres')
-    .select('id, reference, titre, seuil, clients(contact_email)')
+    .select(
+      'id, reference, titre, seuil, statut, date_validite, clients(contact_email)'
+    )
     .eq('id', cand.offre_id)
     .single()
 
@@ -429,6 +431,19 @@ export async function qualifyCandidature(
   // qualifié disparaît de la liste « en attente » de flottement.
   revalidatePath('/candidatures/flottement')
   revalidatePath('/candidatures/incompletes')
+
+  // Garde-fou : si l'offre a été clôturée (manuellement ou date dépassée)
+  // depuis que le CV a été scoré, on change bien le statut de la
+  // candidature mais on n'envoie PAS l'email au client — ça n'aurait pas
+  // de sens de le relancer sur une offre fermée.
+  if (effectiveStatut(offre.statut, offre.date_validite) === 'clos') {
+    return {
+      ok: true,
+      emailSent: false,
+      skippedReason:
+        "Offre clôturée (statut manuel ou date de validité dépassée) : email non envoyé.",
+    }
+  }
 
   // Prépare l'envoi email
   const clientInfo = Array.isArray(offre.clients)

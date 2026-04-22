@@ -91,14 +91,6 @@ export default function FlottementRow({
 
   const hasRealEmail = !!email?.trim() && !email.endsWith('@example.com')
 
-  // Les boutons ne sont affichés que si la transition a du sens : on cache
-  // Qualifier quand déjà qualifié (sinon on renvoie un email inutile) et
-  // Rejeter quand déjà rejeté. Dans la bande de flottement, « rejeté » ne
-  // devrait pas apparaître en pratique (le statut IA est 'qualifié' ou
-  // 'en attente'), mais on gère le cas par précaution.
-  const showQualify = statut !== 'qualifié'
-  const showReject = statut !== 'rejeté'
-
   const feedbackClass =
     feedback?.kind === 'error'
       ? 'bg-status-red-bg text-status-red'
@@ -166,28 +158,24 @@ export default function FlottementRow({
       <td className="px-4 py-4">
         <div className="flex flex-col gap-2 min-w-[11rem]">
           <div className="flex gap-2">
-            {showQualify && (
-              <button
-                type="button"
-                onClick={handleQualify}
-                disabled={isPending}
-                aria-label="Qualifier le candidat"
-                className="px-3 py-2 rounded-md bg-status-green text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <span aria-hidden="true">✓</span> Qualifier
-              </button>
-            )}
-            {showReject && (
-              <button
-                type="button"
-                onClick={handleReject}
-                disabled={isPending}
-                aria-label="Rejeter le candidat"
-                className="px-3 py-2 rounded-md bg-status-red text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <span aria-hidden="true">✗</span> Rejeter
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleQualify}
+              disabled={isPending}
+              aria-label="Qualifier le candidat"
+              className="px-3 py-2 rounded-md bg-status-green text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <span aria-hidden="true">✓</span> Qualifier
+            </button>
+            <button
+              type="button"
+              onClick={handleReject}
+              disabled={isPending}
+              aria-label="Rejeter le candidat"
+              className="px-3 py-2 rounded-md bg-status-red text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <span aria-hidden="true">✗</span> Rejeter
+            </button>
           </div>
           {isPending && (
             <div className="text-xs text-muted">Enregistrement…</div>
