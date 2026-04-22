@@ -369,7 +369,6 @@ export default async function OffresPage({
                 dir={dir}
                 href={sortHref('seuil')}
               />
-              <th className="px-6 pt-3 pb-2">Action</th>
             </tr>
             <tr className="align-top">
               <th className="px-6 pt-0 pb-3 font-normal normal-case">
@@ -412,7 +411,6 @@ export default async function OffresPage({
               <th className="px-6 pt-0 pb-3 font-normal normal-case">
                 <DateFilter field="validite" />
               </th>
-              <th className="px-6 pt-0 pb-3"></th>
               <th className="px-6 pt-0 pb-3"></th>
               <th className="px-6 pt-0 pb-3"></th>
             </tr>
@@ -459,20 +457,12 @@ export default async function OffresPage({
                     {o.seuil}
                   </span>
                 </td>
-                <td className="px-6 py-5">
-                  <Link
-                    href={`/offres/${o.id}`}
-                    className="text-brand-purple text-sm font-medium hover:underline"
-                  >
-                    Voir →
-                  </Link>
-                </td>
               </tr>
             ))}
             {sorted.length === 0 && (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={9}
                   className="px-6 py-8 text-center text-muted text-sm"
                 >
                   {hasFilter
