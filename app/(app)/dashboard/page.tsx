@@ -346,80 +346,79 @@ export default async function DashboardPage({
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Dashboard</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {/* 6 KPIs compactés sur une seule ligne (2 cols mobile → 3 tablette →
+          6 desktop). Les 3 derniers (Qualité IA) ont une bordure gauche
+          colorée pour les différencier visuellement sans perdre la ligne
+          de heading dédiée. */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpis.map((k) => (
           <div
             key={k.label}
-            className="bg-surface-alt rounded-lg px-4 py-2.5 shadow-sm border border-border-soft"
+            className="bg-surface-alt rounded-lg px-3 py-2.5 shadow-sm border border-border-soft"
           >
-            <div className="text-xs text-muted font-medium">{k.label}</div>
-            <div className="text-2xl font-bold text-brand-indigo-text leading-tight">
+            <div className="text-[11px] text-muted font-medium leading-tight">
+              {k.label}
+            </div>
+            <div className="text-2xl font-bold text-brand-indigo-text leading-tight mt-0.5">
               {k.value}
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Qualité IA — indicateurs sur le comportement du scoring */}
-      <section aria-labelledby="qualite-ia-heading">
-        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-2">
-          <h2 id="qualite-ia-heading" className="text-base font-semibold">
-            Qualité IA
-          </h2>
-          <p className="text-xs text-muted">
-            Comment l&apos;IA se comporte sur tes flux de CV
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="bg-surface-alt rounded-lg px-4 py-2.5 shadow-sm border border-border-soft">
-            <div className="text-xs text-muted font-medium">Score moyen</div>
-            <div className="flex items-baseline gap-2 leading-tight">
-              <span className="text-2xl font-bold text-brand-indigo-text">
-                {totalScored > 0 ? scoreMoyen : '—'}
-              </span>
-              <span className="text-xs text-muted">
-                sur {totalScored} CV{totalScored > 1 ? 's' : ''}
-              </span>
-            </div>
+        <div
+          className="bg-surface-alt rounded-lg px-3 py-2.5 shadow-sm border border-border-soft border-l-4 border-l-brand-purple"
+          title="Indicateur de qualité IA"
+        >
+          <div className="text-[11px] text-muted font-medium leading-tight">
+            Score moyen IA
           </div>
-          <Link
-            href="/candidatures/flottement"
-            className="bg-surface-alt rounded-lg px-4 py-2.5 shadow-sm border border-border-soft block hover:border-brand-purple hover:shadow-md transition-all"
-          >
-            <div className="text-xs text-muted font-medium">
-              Taux de flottement
-            </div>
-            <div className="flex items-baseline gap-2 leading-tight">
-              <span className="text-2xl font-bold text-brand-indigo-text">
-                {totalScored > 0 ? `${tauxFlottement}\u00A0%` : '—'}
-              </span>
-              <span className="text-xs text-muted">
-                {flottementCount > 0
-                  ? `${flottementCount} à trancher →`
-                  : '±5 pts du seuil'}
-              </span>
-            </div>
-          </Link>
-          <Link
-            href="/candidatures/incompletes"
-            className="bg-surface-alt rounded-lg px-4 py-2.5 shadow-sm border border-border-soft block hover:border-brand-purple hover:shadow-md transition-all"
-          >
-            <div className="text-xs text-muted font-medium">
-              Taux d&apos;incomplets
-            </div>
-            <div className="flex items-baseline gap-2 leading-tight">
-              <span className="text-2xl font-bold text-brand-indigo-text">
-                {totalScored > 0 ? `${tauxIncomplets}\u00A0%` : '—'}
-              </span>
-              <span className="text-xs text-muted">
-                {incompletsCount > 0
-                  ? `${incompletsCount} à compléter →`
-                  : 'nom ou email manquant'}
-              </span>
-            </div>
-          </Link>
+          <div className="flex items-baseline gap-1.5 leading-tight mt-0.5 flex-wrap">
+            <span className="text-2xl font-bold text-brand-indigo-text">
+              {totalScored > 0 ? scoreMoyen : '—'}
+            </span>
+            <span className="text-[11px] text-muted">
+              sur {totalScored} CV{totalScored > 1 ? 's' : ''}
+            </span>
+          </div>
         </div>
-      </section>
+        <Link
+          href="/candidatures/flottement"
+          className="bg-surface-alt rounded-lg px-3 py-2.5 shadow-sm border border-border-soft border-l-4 border-l-brand-purple block hover:border-brand-purple hover:shadow-md transition-all"
+          title="Indicateur de qualité IA"
+        >
+          <div className="text-[11px] text-muted font-medium leading-tight">
+            Taux de flottement
+          </div>
+          <div className="flex items-baseline gap-1.5 leading-tight mt-0.5 flex-wrap">
+            <span className="text-2xl font-bold text-brand-indigo-text">
+              {totalScored > 0 ? `${tauxFlottement}\u00A0%` : '—'}
+            </span>
+            <span className="text-[11px] text-muted">
+              {flottementCount > 0
+                ? `${flottementCount} à trancher →`
+                : '±5 pts du seuil'}
+            </span>
+          </div>
+        </Link>
+        <Link
+          href="/candidatures/incompletes"
+          className="bg-surface-alt rounded-lg px-3 py-2.5 shadow-sm border border-border-soft border-l-4 border-l-brand-purple block hover:border-brand-purple hover:shadow-md transition-all"
+          title="Indicateur de qualité IA"
+        >
+          <div className="text-[11px] text-muted font-medium leading-tight">
+            Taux d&apos;incomplets
+          </div>
+          <div className="flex items-baseline gap-1.5 leading-tight mt-0.5 flex-wrap">
+            <span className="text-2xl font-bold text-brand-indigo-text">
+              {totalScored > 0 ? `${tauxIncomplets}\u00A0%` : '—'}
+            </span>
+            <span className="text-[11px] text-muted">
+              {incompletsCount > 0
+                ? `${incompletsCount} à compléter →`
+                : 'nom ou email manquant'}
+            </span>
+          </div>
+        </Link>
+      </div>
 
       {/* Évolution + Répartition — côte à côte en 2 colonnes sur grand
           écran, empilés sur mobile. Hauteurs homogènes via items-stretch
