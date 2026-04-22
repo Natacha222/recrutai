@@ -167,7 +167,7 @@ export default async function OffreDetailPage({
             href={`/offres/${offre.id}/modifier`}
             className="ml-auto px-3 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold hover:opacity-90"
           >
-            Modifier l&apos;offre
+            Voir / modifier l&apos;offre
           </Link>
         </div>
       </div>
@@ -185,8 +185,8 @@ export default async function OffreDetailPage({
       {effectiveOffreStatut === 'clos' && (
         <div className="px-3 py-2 rounded-md bg-status-amber-bg text-status-amber text-sm">
           {autoClosed
-            ? "Offre clôturée automatiquement : la date de validité est dépassée. Clique sur « Modifier l'offre » pour la réactiver."
-            : "Offre clôturée. Pour la réactiver, clique sur « Modifier l'offre » et mets une date de validité dans le futur."}
+            ? "Offre clôturée automatiquement : la date de validité est dépassée. Clique sur « Voir / modifier l'offre » pour la réactiver."
+            : "Offre clôturée. Pour la réactiver, clique sur « Voir / modifier l'offre » et mets une date de validité dans le futur."}
         </div>
       )}
 
