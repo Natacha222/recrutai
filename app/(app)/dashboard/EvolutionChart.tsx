@@ -57,8 +57,34 @@ export default function EvolutionChart({ points, periodLabel }: Props) {
     return PAD_TOP + plotH - (v / yMax) * plotH
   }
 
-  const pathOffres = buildLinePath(points.map((p, i) => [x(i), y(p.offresActives)]))
-  const pathClients = buildLinePath(points.map((p, i) => [x(i), y(p.clientsActifs)]))
+  // Séparation réel / prévision : on construit 4 paths pour pouvoir styler
+  // la partie prévisionnelle en pointillé. `firstForecastIdx` vaut -1 s'il
+  // n'y a pas de prévision. Le dernier point réel est inclus aussi comme
+  // premier point du path "forecast" pour que les 2 traits se rejoignent
+  // sans discontinuité visible.
+  const firstForecastIdx = points.findIndex((p) => p.forecasted)
+  const realLast = firstForecastIdx === -1 ? points.length : firstForecastIdx
+  const realPoints = points.slice(0, realLast)
+  const forecastPoints =
+    firstForecastIdx === -1
+      ? []
+      : points.slice(firstForecastIdx - 1, points.length) // -1 pour la jonction
+
+  const realOffsetIdx = 0
+  const forecastOffsetIdx = firstForecastIdx === -1 ? -1 : firstForecastIdx - 1
+
+  const pathOffresReal = buildLinePath(
+    realPoints.map((p, i) => [x(realOffsetIdx + i), y(p.offresActives)])
+  )
+  const pathClientsReal = buildLinePath(
+    realPoints.map((p, i) => [x(realOffsetIdx + i), y(p.clientsActifs)])
+  )
+  const pathOffresForecast = buildLinePath(
+    forecastPoints.map((p, i) => [x(forecastOffsetIdx + i), y(p.offresActives)])
+  )
+  const pathClientsForecast = buildLinePath(
+    forecastPoints.map((p, i) => [x(forecastOffsetIdx + i), y(p.clientsActifs)])
+  )
 
   // Axe Y : 5 graduations (0, Q1, Q2, Q3, max). On affiche des entiers
   // puisque les métriques sont des comptes discrets.
@@ -78,6 +104,21 @@ export default function EvolutionChart({ points, periodLabel }: Props) {
       <div className="flex items-center gap-4 flex-wrap mb-3 text-sm">
         <LegendItem color={COLOR_OFFRES} label="Offres actives" />
         <LegendItem color={COLOR_CLIENTS} label="Clients actifs" />
+        {firstForecastIdx > 0 && (
+          <span className="flex items-center gap-2 text-muted">
+            <span
+              className="inline-block rounded-sm"
+              style={{
+                height: '3px',
+                width: '14px',
+                backgroundImage:
+                  'repeating-linear-gradient(90deg, var(--color-muted, #6b7280) 0 3px, transparent 3px 6px)',
+              }}
+              aria-hidden
+            />
+            <span>Prévision (offres existantes)</span>
+          </span>
+        )}
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -130,9 +171,34 @@ export default function EvolutionChart({ points, periodLabel }: Props) {
           )
         })}
 
-        {/* Courbes */}
+        {/* Ligne verticale « aujourd'hui » entre réel et prévision, pour
+            que l'œil sépare sans ambiguïté le passé mesuré du futur
+            extrapolé. */}
+        {firstForecastIdx > 0 && (
+          <g>
+            <line
+              x1={x(firstForecastIdx - 1)}
+              x2={x(firstForecastIdx - 1)}
+              y1={PAD_TOP}
+              y2={H - PAD_BOTTOM}
+              stroke="var(--color-border-soft, #e5e7eb)"
+              strokeDasharray="4 3"
+              strokeWidth="1"
+            />
+            <text
+              x={x(firstForecastIdx - 1) + 4}
+              y={PAD_TOP + 10}
+              fontSize="11"
+              fill="var(--color-muted, #6b7280)"
+            >
+              Prévision →
+            </text>
+          </g>
+        )}
+
+        {/* Courbes — trait plein pour le réel, pointillé pour la prévision */}
         <path
-          d={pathOffres}
+          d={pathOffresReal}
           fill="none"
           stroke={COLOR_OFFRES}
           strokeWidth="2.5"
@@ -140,25 +206,79 @@ export default function EvolutionChart({ points, periodLabel }: Props) {
           strokeLinejoin="round"
         />
         <path
-          d={pathClients}
+          d={pathClientsReal}
           fill="none"
           stroke={COLOR_CLIENTS}
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+        {pathOffresForecast && (
+          <path
+            d={pathOffresForecast}
+            fill="none"
+            stroke={COLOR_OFFRES}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="5 4"
+            opacity="0.75"
+          />
+        )}
+        {pathClientsForecast && (
+          <path
+            d={pathClientsForecast}
+            fill="none"
+            stroke={COLOR_CLIENTS}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="5 4"
+            opacity="0.75"
+          />
+        )}
 
         {/* Points avec tooltip natif <title>. Plus discret quand il y a
-            beaucoup de buckets (rayon réduit). */}
+            beaucoup de buckets (rayon réduit). Les points prévisionnels
+            sont dessinés en version allégée (creux + opacité réduite). */}
         {points.map((p, i) => {
           const r = points.length > 40 ? 1.5 : 3
+          const suffix = p.forecasted ? ' (prévision)' : ''
+          const offresTitle = `${p.label} — Offres actives : ${p.offresActives}${suffix}`
+          const clientsTitle = `${p.label} — Clients actifs : ${p.clientsActifs}${suffix}`
+          if (p.forecasted) {
+            return (
+              <g key={`pts-${i}`} opacity="0.75">
+                <circle
+                  cx={x(i)}
+                  cy={y(p.offresActives)}
+                  r={r}
+                  fill="white"
+                  stroke={COLOR_OFFRES}
+                  strokeWidth="1.5"
+                >
+                  <title>{offresTitle}</title>
+                </circle>
+                <circle
+                  cx={x(i)}
+                  cy={y(p.clientsActifs)}
+                  r={r}
+                  fill="white"
+                  stroke={COLOR_CLIENTS}
+                  strokeWidth="1.5"
+                >
+                  <title>{clientsTitle}</title>
+                </circle>
+              </g>
+            )
+          }
           return (
             <g key={`pts-${i}`}>
               <circle cx={x(i)} cy={y(p.offresActives)} r={r} fill={COLOR_OFFRES}>
-                <title>{`${p.label} — Offres actives : ${p.offresActives}`}</title>
+                <title>{offresTitle}</title>
               </circle>
               <circle cx={x(i)} cy={y(p.clientsActifs)} r={r} fill={COLOR_CLIENTS}>
-                <title>{`${p.label} — Clients actifs : ${p.clientsActifs}`}</title>
+                <title>{clientsTitle}</title>
               </circle>
             </g>
           )
@@ -211,10 +331,19 @@ function niceCeil(v: number): number {
 
 function buildAriaLabel(points: TimeseriesPoint[], periodLabel: string): string {
   const first = points[0]
-  const last = points[points.length - 1]
-  return (
+  const real = points.filter((p) => !p.forecasted)
+  const forecast = points.filter((p) => p.forecasted)
+  const lastReal = real[real.length - 1] ?? first
+  const base =
     `Évolution sur ${periodLabel} : ` +
-    `offres actives de ${first.offresActives} à ${last.offresActives}, ` +
-    `clients actifs de ${first.clientsActifs} à ${last.clientsActifs}.`
+    `offres actives de ${first.offresActives} à ${lastReal.offresActives}, ` +
+    `clients actifs de ${first.clientsActifs} à ${lastReal.clientsActifs}.`
+  if (forecast.length === 0) return base
+  const lastForecast = forecast[forecast.length - 1]
+  return (
+    base +
+    ` Prévision à horizon ${forecast.length} bucket${forecast.length > 1 ? 's' : ''} : ` +
+    `offres actives ≈ ${lastForecast.offresActives}, ` +
+    `clients actifs ≈ ${lastForecast.clientsActifs}.`
   )
 }

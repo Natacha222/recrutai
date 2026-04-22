@@ -24,6 +24,8 @@ type SearchParams = Promise<{
   evol_from?: string
   /** Si evol=custom : date de fin ISO YYYY-MM-DD. */
   evol_to?: string
+  /** Prévision : 'none' (défaut) | '1m' | '1y'. */
+  forecast?: string
 }>
 
 export default async function DashboardPage({
@@ -439,6 +441,8 @@ export default async function DashboardPage({
             currentFrom={params.evol_from}
             currentTo={params.evol_to}
             todayIso={todayForInput}
+            currentForecast={period.forecast}
+            granularity={period.granularity}
           />
           <EvolutionChart points={timeseries} periodLabel={period.label} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border-soft">

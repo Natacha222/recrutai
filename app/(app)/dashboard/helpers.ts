@@ -11,9 +11,26 @@ export type Period = {
   granularity: 'day' | 'month'
   label: string
   presetKey: PresetKey
+  forecast: ForecastKey
 }
 
 export type PresetKey = '7d' | '30d' | '12m' | 'custom'
+
+/**
+ * Prolongation prévisionnelle du graphique. Projection déterministe :
+ * pour chaque bucket futur, on compte les offres existantes qui seront
+ * encore actives à cette date (created_at <= date, statut !== 'clos', et
+ * date_validite null OU >= date). Les clients actifs en découlent.
+ *
+ * Ce n'est PAS une extrapolation statistique — on ne prédit pas les
+ * futures créations d'offres, on montre seulement la décroissance
+ * mécanique du portefeuille actuel selon les date_validite déjà saisies.
+ *
+ *   - '1m'  : +30 buckets si granularity=day, +1 bucket si month
+ *   - '1y'  : désactivé si granularity=day (trop de points), +12 si month
+ *   - 'none': aucune prévision
+ */
+export type ForecastKey = 'none' | '1m' | '1y'
 
 /** Parse YYYY-MM-DD en Date locale à minuit, sans bascule UTC. */
 function parseIsoDate(iso: string): Date {
@@ -36,8 +53,13 @@ export function resolvePeriod(params: {
   evol?: string
   evol_from?: string
   evol_to?: string
+  forecast?: string
 }): Period {
   const today = parseIsoDate(todayIso())
+  const forecast: ForecastKey =
+    params.forecast === '1m' || params.forecast === '1y'
+      ? (params.forecast as ForecastKey)
+      : 'none'
 
   if (
     params.evol === 'custom' &&
@@ -59,6 +81,7 @@ export function resolvePeriod(params: {
         granularity: days <= 62 ? 'day' : 'month',
         label: `Du ${frenchShort(from)} au ${frenchShort(to)}`,
         presetKey: 'custom',
+        forecast,
       }
     }
   }
@@ -74,6 +97,7 @@ export function resolvePeriod(params: {
       granularity: 'day',
       label: '7 derniers jours',
       presetKey: '7d',
+      forecast,
     }
   }
   if (key === '12m') {
@@ -84,6 +108,7 @@ export function resolvePeriod(params: {
       granularity: 'month',
       label: '12 derniers mois',
       presetKey: '12m',
+      forecast,
     }
   }
   // Défaut : 30 jours
@@ -95,6 +120,7 @@ export function resolvePeriod(params: {
     granularity: 'day',
     label: '30 derniers jours',
     presetKey: '30d',
+    forecast,
   }
 }
 
@@ -185,6 +211,8 @@ export type TimeseriesPoint = {
   clientsActifs: number
   /** Nb de candidatures créées dans le bucket (flux). */
   candidaturesRecues: number
+  /** true si le point est extrapolé (prévision), false si mesuré. */
+  forecasted: boolean
 }
 
 /**
@@ -204,31 +232,134 @@ export function computeTimeseries(
   offres: OffreForSeries[],
   candidatures: CandForSeries[]
 ): TimeseriesPoint[] {
-  const buckets = buildBuckets(period)
+  const pastBuckets = buildBuckets(period)
+  const futureBuckets = buildForecastBuckets(period)
 
-  return buckets.map((b) => {
-    const activeAtEnd = offres.filter((o) => {
-      if (o.statut === 'clos') return false
-      const created = new Date(o.created_at)
-      if (created >= b.end) return false
-      if (o.date_validite) {
-        // Inclusif : une offre dont date_validite = dernier jour du bucket
-        // est encore active en fin de bucket.
-        const expiry = parseIsoDate(o.date_validite)
-        if (expiry < b.end) return false
-      }
-      return true
-    })
-    const clientIds = new Set(activeAtEnd.map((o) => o.client_id))
-    const inBucket = candidatures.filter((c) => {
-      const d = new Date(c.created_at)
-      return d >= b.start && d < b.end
-    })
-    return {
-      label: b.label,
-      offresActives: activeAtEnd.length,
-      clientsActifs: clientIds.size,
-      candidaturesRecues: inBucket.length,
+  return [
+    ...pastBuckets.map((b) => computePoint(b, offres, candidatures, false)),
+    ...futureBuckets.map((b) => computePoint(b, offres, [], true)),
+  ]
+}
+
+/**
+ * Calcule un point du graphique pour un bucket donné (passé ou futur). Le
+ * calcul d'« offre active à la fin du bucket » est identique dans les deux
+ * cas : on se base sur les offres existantes aujourd'hui avec leur
+ * created_at, leur date_validite et leur statut. Pour les buckets futurs,
+ * sans création d'offres nouvelles, le nombre ne peut que décroître ou
+ * rester stable (les offres expirent à leur date_validite).
+ *
+ * Pour les buckets futurs, `candidaturesRecues` est forcée à 0 : on ne
+ * peut pas projeter le flux de candidatures sans modèle probabiliste, et
+ * le graphique ne l'affiche pas de toute façon.
+ */
+function computePoint(
+  b: Bucket,
+  offres: OffreForSeries[],
+  candidatures: CandForSeries[],
+  forecasted: boolean
+): TimeseriesPoint {
+  const activeAtEnd = offres.filter((o) => {
+    if (o.statut === 'clos') return false
+    const created = new Date(o.created_at)
+    if (created >= b.end) return false
+    if (o.date_validite) {
+      const expiry = parseIsoDate(o.date_validite)
+      if (expiry < b.end) return false
     }
+    return true
   })
+  const clientIds = new Set(activeAtEnd.map((o) => o.client_id))
+  const inBucket = candidatures.filter((c) => {
+    const d = new Date(c.created_at)
+    return d >= b.start && d < b.end
+  })
+  return {
+    label: b.label,
+    offresActives: activeAtEnd.length,
+    clientsActifs: clientIds.size,
+    candidaturesRecues: inBucket.length,
+    forecasted,
+  }
+}
+
+/**
+ * Construit les buckets futurs (post-période.to), selon la même
+ * granularité que les buckets passés. Sert à projeter qui sera encore
+ * actif parmi les offres existantes — c'est une projection déterministe,
+ * pas une extrapolation statistique.
+ *
+ * Horizon :
+ *   - '1m' en granularity=day   → 30 buckets (jours)
+ *   - '1m' en granularity=month → 1 bucket
+ *   - '1y' en granularity=month → 12 buckets
+ *   - '1y' en granularity=day   → désactivé côté UI (trop de points)
+ */
+function buildForecastBuckets(period: Period): Bucket[] {
+  if (period.forecast === 'none') return []
+  const nbExtra = countForecastBuckets(period.forecast, period.granularity)
+  if (nbExtra === 0) return []
+
+  const monthShort = [
+    'Jan',
+    'Fév',
+    'Mar',
+    'Avr',
+    'Mai',
+    'Juin',
+    'Juil',
+    'Août',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Déc',
+  ]
+
+  if (period.granularity === 'day') {
+    // On démarre au lendemain de period.to. `start` inclusif, `end` exclusif
+    // — même convention que buildBuckets pour que la jonction soit propre.
+    const cursor = new Date(
+      period.to.getFullYear(),
+      period.to.getMonth(),
+      period.to.getDate() + 1
+    )
+    return Array.from({ length: nbExtra }, () => {
+      const start = new Date(cursor)
+      const end = new Date(cursor)
+      end.setDate(end.getDate() + 1)
+      const jj = String(start.getDate()).padStart(2, '0')
+      const mm = String(start.getMonth() + 1).padStart(2, '0')
+      const bucket: Bucket = { start, end, label: `${jj}/${mm}` }
+      cursor.setDate(cursor.getDate() + 1)
+      return bucket
+    })
+  }
+
+  // Mensuel : on démarre au 1er du mois suivant period.to.
+  const cursor = new Date(period.to.getFullYear(), period.to.getMonth() + 1, 1)
+  return Array.from({ length: nbExtra }, () => {
+    const start = new Date(cursor)
+    const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+    const label = `${monthShort[start.getMonth()]} ${String(start.getFullYear()).slice(-2)}`
+    const bucket: Bucket = { start, end, label }
+    cursor.setMonth(cursor.getMonth() + 1)
+    return bucket
+  })
+}
+
+/**
+ * Convertit un ForecastKey en nombre de buckets à projeter, en fonction
+ * de la granularité. '1y' en granularity=day reste désactivé : 365 points
+ * rendraient l'axe X illisible (et les offres sans date_validite seraient
+ * actives à l'infini, aplatissant la courbe).
+ */
+function countForecastBuckets(
+  forecast: ForecastKey,
+  granularity: 'day' | 'month'
+): number {
+  if (forecast === 'none') return 0
+  if (granularity === 'day') {
+    return forecast === '1m' ? 30 : 0
+  }
+  return forecast === '1m' ? 1 : 12
 }

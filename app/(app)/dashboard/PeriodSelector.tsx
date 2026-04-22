@@ -26,6 +26,10 @@ type Props = {
   currentTo?: string
   /** Date max proposée aux inputs (≈ aujourd'hui au format ISO). */
   todayIso: string
+  /** Prévision actuelle : 'none' | '1m' | '1y'. */
+  currentForecast: 'none' | '1m' | '1y'
+  /** Granularité actuelle : utilisée pour désactiver '1y' en mode jour. */
+  granularity: 'day' | 'month'
 }
 
 export default function PeriodSelector({
@@ -33,6 +37,8 @@ export default function PeriodSelector({
   currentFrom,
   currentTo,
   todayIso,
+  currentForecast,
+  granularity,
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
@@ -60,6 +66,11 @@ export default function PeriodSelector({
     setCustomOpen(false)
     setErr(null)
     push({ evol: key, evol_from: null, evol_to: null })
+  }
+
+  function selectForecast(key: 'none' | '1m' | '1y') {
+    // 'none' → on supprime le param pour garder l'URL propre.
+    push({ forecast: key === 'none' ? null : key })
   }
 
   function applyCustom() {
@@ -108,6 +119,47 @@ export default function PeriodSelector({
         >
           Période personnalisée
         </button>
+      </div>
+
+      {/* Prévision — sur sa propre ligne pour ne pas surcharger celle des
+          presets. '1 an' est désactivé en granularity=day (trop de points
+          futurs pour un modèle linéaire simple). */}
+      <div className="flex items-center gap-2 flex-wrap text-sm">
+        <span className="text-xs text-muted font-medium mr-1">Prévision :</span>
+        {(
+          [
+            { key: 'none', label: 'Aucune' },
+            { key: '1m', label: '+ 1 mois' },
+            { key: '1y', label: '+ 1 an' },
+          ] as const
+        ).map((opt) => {
+          const active = currentForecast === opt.key
+          const disabled = opt.key === '1y' && granularity === 'day'
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => !disabled && selectForecast(opt.key)}
+              disabled={disabled}
+              title={
+                disabled
+                  ? 'Indisponible sur une période en jours — choisis un preset mensuel (12 mois ou période personnalisée longue).'
+                  : undefined
+              }
+              className={`px-3 py-1 rounded-md text-xs border transition-colors ${
+                active
+                  ? 'bg-brand-purple text-white border-brand-purple'
+                  : disabled
+                    ? 'bg-surface-alt text-muted border-border-soft opacity-50 cursor-not-allowed'
+                    : 'bg-surface-alt text-brand-indigo-text border-border-soft hover:border-brand-purple'
+              }`}
+              aria-pressed={active}
+              aria-disabled={disabled}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
       </div>
 
       {customOpen && (
