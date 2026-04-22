@@ -362,6 +362,8 @@ export async function ingestCVs({
   revalidatePath(`/offres/${offreId}`)
   revalidatePath('/offres')
   revalidatePath('/dashboard')
+  revalidatePath('/candidatures/flottement')
+  revalidatePath('/candidatures/incompletes')
   return {
     ok: true,
     notifications: {
@@ -423,6 +425,10 @@ export async function qualifyCandidature(
 
   revalidatePath(`/offres/${cand.offre_id}`)
   revalidatePath('/dashboard')
+  // Listes globales de candidatures (dashboard drill-downs) : un candidat
+  // qualifié disparaît de la liste « en attente » de flottement.
+  revalidatePath('/candidatures/flottement')
+  revalidatePath('/candidatures/incompletes')
 
   // Prépare l'envoi email
   const clientInfo = Array.isArray(offre.clients)
@@ -543,6 +549,8 @@ export async function deleteAllCandidaturesForOffre(
   revalidatePath(`/offres/${offreId}`)
   revalidatePath('/offres')
   revalidatePath('/dashboard')
+  revalidatePath('/candidatures/flottement')
+  revalidatePath('/candidatures/incompletes')
   return {
     ok: true,
     deletedCount: count ?? 0,
@@ -580,5 +588,7 @@ export async function rejectCandidature(
 
   revalidatePath(`/offres/${cand.offre_id}`)
   revalidatePath('/dashboard')
+  revalidatePath('/candidatures/flottement')
+  revalidatePath('/candidatures/incompletes')
   return { ok: true }
 }

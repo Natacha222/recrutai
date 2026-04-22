@@ -122,6 +122,7 @@ export async function updateCandidatureInfo({
   // mais la sauvegarde nom/email est bien persistée.
   const revalidateAll = () => {
     revalidatePath('/candidatures/incompletes')
+    revalidatePath('/candidatures/flottement')
     revalidatePath('/dashboard')
     if (offre) revalidatePath(`/offres/${offre.id}`)
   }

@@ -277,7 +277,10 @@ export default async function DashboardPage() {
               sur {totalScored} CV scoré{totalScored > 1 ? 's' : ''}
             </div>
           </div>
-          <div className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft">
+          <Link
+            href="/candidatures/flottement"
+            className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft block hover:border-brand-purple hover:shadow-md transition-all"
+          >
             <div className="text-sm text-muted font-medium">
               Taux de flottement
             </div>
@@ -285,9 +288,11 @@ export default async function DashboardPage() {
               {totalScored > 0 ? `${tauxFlottement}\u00A0%` : '—'}
             </div>
             <div className="text-sm text-muted mt-1">
-              Candidats à ±5 pts du seuil de leur offre
+              {flottementCount > 0
+                ? `${flottementCount} CV${flottementCount > 1 ? 's' : ''} à trancher →`
+                : 'Candidats à ±5 pts du seuil de leur offre'}
             </div>
-          </div>
+          </Link>
           <Link
             href="/candidatures/incompletes"
             className="bg-surface-alt rounded-xl p-5 shadow-sm border border-border-soft block hover:border-brand-purple hover:shadow-md transition-all"

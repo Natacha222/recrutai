@@ -17,6 +17,7 @@ type Props = {
   offreId: string
   offreTitre: string
   offreReference: string | null
+  offreAmReferent: string | null
 }
 
 type Feedback =
@@ -39,6 +40,7 @@ export default function IncompleteRow({
   offreId,
   offreTitre,
   offreReference,
+  offreAmReferent,
 }: Props) {
   const [nom, setNom] = useState(initialNom)
   const [email, setEmail] = useState(emailIsPlaceholder ? '' : initialEmail)
@@ -98,6 +100,9 @@ export default function IncompleteRow({
             Réf. {offreReference}
           </div>
         )}
+      </td>
+      <td className="px-4 py-4 text-muted whitespace-nowrap">
+        {offreAmReferent ?? '—'}
       </td>
       <td className="px-4 py-4">
         <span className={`font-bold text-lg ${scoreColor}`}>
