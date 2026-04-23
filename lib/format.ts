@@ -102,6 +102,53 @@ export function normalizeClientName(raw: string): string {
 }
 
 /**
+ * Classe Tailwind de couleur pour un score IA, en fonction du seuil de
+ * qualification de l'offre. Centralise la logique pour qu'elle reste
+ * identique partout (tableau de candidatures global, fiche offre,
+ * dashboard…). Cohérent avec la bande de flottement (±5 pts) :
+ *
+ *   - score >= seuil            → vert   (qualifié)
+ *   - score >= seuil - 15       → ambre  (proche ou sous le seuil)
+ *   - sinon                     → rouge  (nettement en dessous)
+ *   - score null                → muted  (pas encore scoré / scoring KO)
+ *
+ * Seuil par défaut (60) utilisé si non fourni — cohérent avec la valeur
+ * par défaut côté création d'offre et les KPIs du dashboard.
+ */
+export function scoreColor(
+  score: number | null | undefined,
+  seuil: number | null | undefined
+): string {
+  if (score === null || score === undefined) return 'text-muted'
+  const s = seuil ?? 60
+  if (score >= s) return 'text-status-green'
+  if (score >= s - 15) return 'text-status-amber'
+  return 'text-status-red'
+}
+
+/**
+ * Ajoute `days` jours à une date ISO YYYY-MM-DD et renvoie la date
+ * résultante au même format. Passe par un objet Date en timezone locale
+ * pour que le passage d'un mois à l'autre fonctionne correctement
+ * (ex. 31 janvier + 1 jour = 1er février, pas 32 janvier).
+ *
+ *   addDaysIso('2026-04-23', 90)  -> '2026-07-22'
+ *   addDaysIso('2026-01-31', 1)   -> '2026-02-01'
+ *
+ * Retourne une chaîne vide si `isoDate` n'est pas au format attendu, pour
+ * que l'appelant puisse gérer le fallback sans exception.
+ */
+export function addDaysIso(isoDate: string, days: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return ''
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const date = new Date(y, (m ?? 1) - 1, (d ?? 1) + days)
+  const yy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
+/**
  * Déduit un référent au format canonique « F. NOM » depuis un email.
  * Règle : on prend la partie locale de l'email, on transforme les
  * séparateurs (. _ -) en espaces, puis on délègue à formatReferent.

@@ -3,7 +3,12 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
 import ResendEmailAction from '@/components/ResendEmailAction'
-import { formatValidite, effectiveStatut, isExpired } from '@/lib/format'
+import {
+  formatValidite,
+  effectiveStatut,
+  isExpired,
+  scoreColor,
+} from '@/lib/format'
 import {
   DateFilter,
   FiltersReset,
@@ -320,16 +325,16 @@ export default async function OffreDetailPage({
                 </td>
                 <td className="px-6 py-4">
                   <span
-                    className={`font-bold text-lg ${
-                      (c.score_ia ?? 0) >= 70
-                        ? 'text-status-green'
-                        : (c.score_ia ?? 0) >= 50
-                          ? 'text-status-amber'
-                          : 'text-status-red'
-                    }`}
+                    className={`font-bold text-lg ${scoreColor(c.score_ia, offre.seuil)}`}
                   >
                     {c.score_ia ?? '—'}
                   </span>
+                  {offre.seuil != null && c.score_ia != null && (
+                    <span className="text-xs text-muted">
+                      {' '}
+                      / {offre.seuil}
+                    </span>
+                  )}
                 </td>
                 <td className="px-6 py-4 text-muted text-sm max-w-md">
                   {c.justification_ia}

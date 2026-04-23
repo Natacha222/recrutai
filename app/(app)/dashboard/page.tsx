@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
-import { effectiveStatut, todayIso } from '@/lib/format'
+import { effectiveStatut, scoreColor, todayIso } from '@/lib/format'
 import StatutPieChart from './StatutPieChart'
 import EvolutionChart from './EvolutionChart'
 import PeriodSelector from './PeriodSelector'
@@ -281,6 +281,8 @@ export default async function DashboardPage({
         nom: string | null
         email: string | null
         scoreIa: number | null
+        /** Seuil de l'offre ciblée, pour colorer le score vs seuil (±15). */
+        seuil: number | null
         statut: string | null
         offre: OffreRef
         createdAt: string
@@ -301,15 +303,17 @@ export default async function DashboardPage({
 
   const activites: Activite[] = [
     ...recentCandidatures.map((c): Activite => {
-      const offreInfo = (Array.isArray(c.offres)
-        ? c.offres[0]
-        : c.offres) as OffreRef
+      const offreRaw = Array.isArray(c.offres) ? c.offres[0] : c.offres
+      const offreInfo: OffreRef = offreRaw
+        ? { id: offreRaw.id, titre: offreRaw.titre }
+        : null
       return {
         type: 'candidature',
         id: c.id,
         nom: c.nom,
         email: c.email,
         scoreIa: c.score_ia,
+        seuil: offreRaw?.seuil ?? null,
         statut: c.statut,
         offre: offreInfo,
         createdAt: c.created_at,
@@ -534,13 +538,7 @@ export default async function DashboardPage({
                   <div className="flex items-center gap-3 shrink-0">
                     {a.scoreIa !== null && (
                       <span
-                        className={`font-bold ${
-                          a.scoreIa >= 70
-                            ? 'text-status-green'
-                            : a.scoreIa >= 50
-                              ? 'text-status-amber'
-                              : 'text-status-red'
-                        }`}
+                        className={`font-bold ${scoreColor(a.scoreIa, a.seuil)}`}
                         aria-label={`Score ${a.scoreIa} sur 100`}
                       >
                         {a.scoreIa}

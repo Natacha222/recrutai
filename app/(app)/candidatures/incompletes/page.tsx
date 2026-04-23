@@ -21,12 +21,14 @@ type CandidatureRow = {
         id: string
         titre: string
         reference: string | null
+        seuil: number | null
         am_referent: string | null
       }
     | {
         id: string
         titre: string
         reference: string | null
+        seuil: number | null
         am_referent: string | null
       }[]
     | null
@@ -55,7 +57,7 @@ export default async function IncompletesPage({
   const { data: rows } = await supabase
     .from('candidatures')
     .select(
-      'id, nom, email, score_ia, cv_url, created_at, offres(id, titre, reference, am_referent)'
+      'id, nom, email, score_ia, cv_url, created_at, offres(id, titre, reference, seuil, am_referent)'
     )
     .not('score_ia', 'is', null)
     .order('created_at', { ascending: false })
@@ -65,6 +67,7 @@ export default async function IncompletesPage({
       id: string
       titre: string
       reference: string | null
+      seuil: number | null
       am_referent: string | null
     } | null
   }
@@ -180,6 +183,7 @@ export default async function IncompletesPage({
                     initialEmail={c.email ?? ''}
                     emailIsPlaceholder={emailIsPlaceholder}
                     scoreIa={c.score_ia}
+                    seuil={offre.seuil}
                     cvUrl={c.cv_url}
                     offreId={offre.id}
                     offreTitre={offre.titre}

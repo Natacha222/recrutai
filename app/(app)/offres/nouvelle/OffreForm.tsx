@@ -5,11 +5,20 @@ import { flushSync } from 'react-dom'
 import Link from 'next/link'
 import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
 import { FIELD_LIMITS } from '@/lib/validation'
+import { addDaysIso } from '@/lib/format'
 import {
   createOffre,
   extractOffreAction,
   createClientInlineAction,
 } from './actions'
+
+// Durée de validité par défaut proposée à la création. 3 mois (90 j)
+// couvre la plupart des recrutements : si l'offre n'est pas pourvue sous
+// 3 mois, on préfère que l'utilisateur la revalide consciemment plutôt
+// que de la laisser active éternellement. L'utilisateur peut changer la
+// date librement (input type=date), c'est juste un défaut sensé pour
+// éviter le choix anxiogène d'une date sans repère.
+const DEFAULT_VALIDITY_DAYS = 90
 
 type Client = { id: string; nom: string }
 type Contrat = 'CDI' | 'CDD' | 'Alternance' | 'Stage'
@@ -53,7 +62,12 @@ export default function OffreForm({
   const [contrat, setContrat] = useState<Contrat>('CDI')
   const [seuil, setSeuil] = useState<number>(60)
   const [description, setDescription] = useState('')
-  const [dateValidite, setDateValidite] = useState('')
+  // Défaut : today + 90 jours. On calcule dans l'initializer pour que le
+  // champ soit pré-rempli dès le premier render, sans effet secondaire.
+  // L'import PDF peut l'écraser ensuite si une date est extraite.
+  const [dateValidite, setDateValidite] = useState(() =>
+    addDaysIso(today, DEFAULT_VALIDITY_DAYS)
+  )
   // Par défaut, l'offre est attribuée au référent de l'utilisateur connecté.
   // Il peut changer si l'offre est enregistrée pour un collègue.
   const [amReferent, setAmReferent] = useState<string>(defaultReferent ?? '')
@@ -503,13 +517,24 @@ export default function OffreForm({
               value={dateValidite}
               onChange={(e) => setDateValidite(e.target.value)}
               aria-invalid={dateInPast}
-              aria-describedby={dateInPast ? 'date_validite_error' : undefined}
+              aria-describedby={
+                dateInPast
+                  ? 'date_validite_help date_validite_error'
+                  : 'date_validite_help'
+              }
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
                 dateInPast
                   ? 'border-status-red focus:ring-status-red'
                   : 'border-border-soft focus:ring-brand-purple'
               }`}
             />
+            <p
+              id="date_validite_help"
+              className="text-xs text-muted mt-1"
+            >
+              Par défaut, 3 mois. Modifie si nécessaire — passé cette
+              date, l&apos;offre se clôture automatiquement.
+            </p>
             {dateInPast && (
               <p
                 id="date_validite_error"

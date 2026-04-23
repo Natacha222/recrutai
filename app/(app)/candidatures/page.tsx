@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { FiltersReset, SelectFilter } from '@/components/TableFilters'
 import StatusBadge from '@/components/StatusBadge'
 import ResendEmailAction from '@/components/ResendEmailAction'
+import { scoreColor } from '@/lib/format'
 import TrancherActions from './TrancherActions'
 
 /**
@@ -142,14 +143,6 @@ export default async function CandidaturesPage({
     const jj = String(d.getDate()).padStart(2, '0')
     const mm = String(d.getMonth() + 1).padStart(2, '0')
     return `${jj}/${mm}/${d.getFullYear()}`
-  }
-
-  const scoreColor = (score: number | null, seuil: number | null) => {
-    if (score === null) return 'text-muted'
-    const s = seuil ?? 60
-    if (score >= s) return 'text-status-green'
-    if (score >= s - 15) return 'text-status-amber'
-    return 'text-status-red'
   }
 
   /**

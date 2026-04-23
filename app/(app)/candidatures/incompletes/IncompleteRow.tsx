@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
+import { scoreColor } from '@/lib/format'
 import { updateCandidatureInfo, type UpdateCandidatureInfoResult } from './actions'
 
 type Props = {
@@ -13,6 +14,8 @@ type Props = {
    *  « valider » le placeholder par inadvertance. */
   emailIsPlaceholder: boolean
   scoreIa: number | null
+  /** Seuil de qualification de l'offre, pour colorer le score vs seuil (±15). */
+  seuil: number | null
   cvUrl: string | null
   offreId: string
   offreTitre: string
@@ -36,6 +39,7 @@ export default function IncompleteRow({
   initialEmail,
   emailIsPlaceholder,
   scoreIa,
+  seuil,
   cvUrl,
   offreId,
   offreTitre,
@@ -56,14 +60,7 @@ export default function IncompleteRow({
     })
   }
 
-  const scoreColor =
-    scoreIa === null
-      ? 'text-muted'
-      : scoreIa >= 70
-        ? 'text-status-green'
-        : scoreIa >= 50
-          ? 'text-status-amber'
-          : 'text-status-red'
+  const scoreClass = scoreColor(scoreIa, seuil)
 
   const feedbackClass =
     feedback?.kind === 'error'
@@ -107,7 +104,7 @@ export default function IncompleteRow({
         {offreAmReferent ?? '—'}
       </td>
       <td className="px-4 py-4">
-        <span className={`font-bold text-lg ${scoreColor}`}>
+        <span className={`font-bold text-lg ${scoreClass}`}>
           {scoreIa ?? '—'}
         </span>
       </td>
