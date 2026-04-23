@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { getAuthedClient } from '@/lib/auth/require-user'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import {
@@ -27,7 +27,8 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_PDF_SIZE = 10 * 1024 * 1024
 
 export async function createOffre(formData: FormData) {
-  const supabase = await createClient()
+  const { supabase, user } = await getAuthedClient()
+  if (!user) return redirect('/login?error=Session+expir%C3%A9e')
 
   // Troncature défensive sur tous les champs texte : protège contre un
   // POST qui contournerait le maxLength HTML (paste monstrueux, attaque
@@ -192,13 +193,16 @@ export async function extractOffreAction(
     }
   }
 
+  const { supabase, user } = await getAuthedClient()
+  if (!user) {
+    return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+  }
+
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
 
   const result = await extractOffreFromPdfBuffer(buffer)
   if (!result.ok) return result
-
-  const supabase = await createClient()
 
   // Upload du PDF dans le bucket offres-pdf. L'offre n'existe pas encore
   // à ce stade, donc on stocke sous `${userId}/${timestamp}-${nom}`. Si
@@ -206,8 +210,7 @@ export async function extractOffreAction(
   // acceptable en pratique (volume faible + on peut nettoyer a posteriori).
   let pdfPath: string | null = null
   try {
-    const { data: userRes } = await supabase.auth.getUser()
-    const userId = userRes.user?.id ?? 'anon'
+    const userId = user.id
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const candidatePath = `${userId}/${Date.now()}-${safeName}`
     const { error: upErr } = await supabase.storage
@@ -263,7 +266,10 @@ export async function createClientInlineAction(input: {
 }): Promise<
   { ok: true; client: { id: string; nom: string } } | { ok: false; error: string }
 > {
-  const supabase = await createClient()
+  const { supabase, user } = await getAuthedClient()
+  if (!user) {
+    return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+  }
 
   // Troncature défensive — voir createClientAction pour le rationale.
   const nom = truncate(input.nom, FIELD_LIMITS.client_nom).trim()

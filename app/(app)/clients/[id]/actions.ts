@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { getAuthedClient } from '@/lib/auth/require-user'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { formatReferent, isValidEmail, normalizeClientName } from '@/lib/format'
@@ -9,7 +9,8 @@ import { FIELD_LIMITS, truncate } from '@/lib/validation'
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
 
 export async function updateClient(formData: FormData) {
-  const supabase = await createClient()
+  const { supabase, user } = await getAuthedClient()
+  if (!user) return redirect('/login?error=Session+expir%C3%A9e')
 
   const id = String(formData.get('id') ?? '').trim()
   // Troncature défensive — voir commentaire dans createClientAction.

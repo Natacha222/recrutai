@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { getAuthedClient } from '@/lib/auth/require-user'
 import { revalidatePath } from 'next/cache'
 import {
   persistEmailResult,
@@ -73,7 +73,10 @@ export async function resendQualifiedEmail(
 ): Promise<ResendResult> {
   if (!candidatureId) return { ok: false, error: 'Candidature introuvable.' }
 
-  const supabase = await createClient()
+  const { supabase, user } = await getAuthedClient()
+  if (!user) {
+    return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+  }
 
   const { data: candRaw, error: candErr } = await supabase
     .from('candidatures')

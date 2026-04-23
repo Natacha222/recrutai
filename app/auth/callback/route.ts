@@ -21,9 +21,19 @@ export async function GET(request: Request) {
   const code = url.searchParams.get('code')
   const next = url.searchParams.get('next') ?? '/auth/reinitialiser'
 
-  // Garde-fou : on n'autorise que des chemins internes pour éviter un
-  // open redirect via ?next=https://phishing.example.
-  const safeNext = next.startsWith('/') ? next : '/auth/reinitialiser'
+  // Garde-fou open redirect : on veut un chemin relatif à notre origine.
+  // `next.startsWith('/')` ne suffit PAS — les URLs « protocol-relative »
+  // comme `//evil.com/phish` ou `/\evil.com` commencent aussi par `/` et
+  // sont interprétées comme absolues par new URL() + la plupart des
+  // navigateurs (un clic sur le lien email ?next=//evil.com fait sortir
+  // l'utilisateur de notre domaine après login). On exige donc : premier
+  // char `/`, ET deuxième char ni `/` ni `\`.
+  const isSafeInternalPath =
+    next.startsWith('/') &&
+    next.length > 1 &&
+    next[1] !== '/' &&
+    next[1] !== '\\'
+  const safeNext = isSafeInternalPath ? next : '/auth/reinitialiser'
 
   if (!code) {
     return NextResponse.redirect(

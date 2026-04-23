@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { getAuthedClient } from '@/lib/auth/require-user'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { scoreCandidate } from '@/lib/scoring'
@@ -24,7 +24,8 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_CV_SIZE = 10 * 1024 * 1024
 
 export async function updateOffre(formData: FormData) {
-  const supabase = await createClient()
+  const { supabase, user } = await getAuthedClient()
+  if (!user) return redirect('/login?error=Session+expir%C3%A9e')
 
   const id = String(formData.get('id') ?? '').trim()
   // Troncature défensive : protège contre un POST qui bypass le maxLength
@@ -198,7 +199,10 @@ export async function ingestCVs({
     return { ok: false, error: 'Aucun fichier à traiter.' }
   }
 
-  const supabase = await createClient()
+  const { supabase, user } = await getAuthedClient()
+  if (!user) {
+    return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+  }
 
   const { data: offre, error: offreErr } = await supabase
     .from('offres')
@@ -522,7 +526,10 @@ export async function qualifyCandidature(
 ): Promise<PromoteResult> {
   if (!candidatureId) return { ok: false, error: 'Candidature introuvable.' }
 
-  const supabase = await createClient()
+  const { supabase, user } = await getAuthedClient()
+  if (!user) {
+    return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+  }
 
   const { data: cand, error: candErr } = await supabase
     .from('candidatures')
@@ -670,7 +677,10 @@ export async function rejectCandidature(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!candidatureId) return { ok: false, error: 'Candidature introuvable.' }
 
-  const supabase = await createClient()
+  const { supabase, user } = await getAuthedClient()
+  if (!user) {
+    return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+  }
 
   const { data: cand, error: candErr } = await supabase
     .from('candidatures')
@@ -738,7 +748,10 @@ export async function backfillPointsForOffre(
 ): Promise<BackfillResult> {
   if (!offreId) return { ok: false, error: 'Offre introuvable.' }
 
-  const supabase = await createClient()
+  const { supabase, user } = await getAuthedClient()
+  if (!user) {
+    return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+  }
 
   // Cible : candidatures de cette offre, scorées (justification présente)
   // MAIS sans bullets encore calculés. On ignore les candidatures dont
