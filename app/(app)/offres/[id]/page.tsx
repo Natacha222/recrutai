@@ -18,6 +18,7 @@ import {
 } from '@/components/TableFilters'
 import CVUploader from './CVUploader'
 import CandidatureActions from './CandidatureActions'
+import BackfillPointsButton from './BackfillPointsButton'
 
 type CandidatureFilter = 'qualifié' | 'en attente' | 'rejeté'
 const FILTERS: CandidatureFilter[] = ['qualifié', 'en attente', 'rejeté']
@@ -139,6 +140,21 @@ export default async function OffreDetailPage({
     justQLower ||
     recuFromEffective
   )
+
+  // Candidatures scorées avant l'arrivée des arrays `points_forts` /
+  // `points_faibles` : elles ont un `justification_ia` mais des bullets
+  // à NULL, donc l'UI retombe sur le bouton « Voir la justification IA »
+  // au lieu d'afficher les points forts / faibles. On expose un bouton
+  // one-shot pour backfiller ces lignes. On ignore les justifications
+  // « Scoring IA indisponible » : celles-là nécessitent un vrai rescore,
+  // le backfill ne ferait rien d'utile dessus.
+  const missingPointsCount = (candidatures ?? []).filter(
+    (c) =>
+      c.points_forts === null &&
+      typeof c.justification_ia === 'string' &&
+      c.justification_ia.trim().length > 0 &&
+      !c.justification_ia.startsWith('Scoring IA indisponible')
+  ).length
 
   const clientInfo = Array.isArray(offre.clients)
     ? offre.clients[0]
@@ -280,15 +296,23 @@ export default async function OffreDetailPage({
           horizontalement plutôt que de squeezer la Justification IA sur
           les autres colonnes (bug observé sur viewport < 1100 px). */}
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
-        <div className="px-6 py-4 border-b border-border-soft flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="font-semibold">
+        <div className="px-6 py-4 border-b border-border-soft flex items-start justify-between gap-3 flex-wrap">
+          <h2 className="font-semibold pt-1">
             {hasCandFilter
               ? `${filteredCandidatures.length} résultat${
                   filteredCandidatures.length > 1 ? 's' : ''
                 } sur ${total}`
               : `Candidatures reçues (${total})`}
           </h2>
-          <FiltersReset fields={CAND_FILTER_FIELDS} />
+          <div className="flex items-start gap-3 flex-wrap">
+            {missingPointsCount > 0 && (
+              <BackfillPointsButton
+                offreId={offre.id}
+                missingCount={missingPointsCount}
+              />
+            )}
+            <FiltersReset fields={CAND_FILTER_FIELDS} />
+          </div>
         </div>
         <table className="w-full min-w-[960px]">
           <thead className="bg-surface">

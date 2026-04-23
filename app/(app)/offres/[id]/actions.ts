@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { scoreCandidate } from '@/lib/scoring'
+import { extractPointsFromJustification } from '@/lib/extractPointsFromJustification'
 import {
   persistEmailResult,
   sendQualifiedCandidateEmail,
@@ -706,4 +707,115 @@ export async function rejectCandidature(
     revalidatePath('/candidatures/flottement')
   }
   return { ok: true }
+}
+
+type BackfillResult =
+  | {
+      ok: true
+      processed: number
+      failed: number
+      skipped: number
+      total: number
+    }
+  | { ok: false; error: string }
+
+/**
+ * Backfill des points_forts / points_faibles pour une offre donnée.
+ *
+ * Cible les candidatures scorées AVANT que scoreCandidate() ne renvoie
+ * les arrays structurés — elles ont un `justification_ia` mais des colonnes
+ * `points_forts` / `points_faibles` à NULL, donc l'UI retombe sur le
+ * bouton « Voir la justification IA » plutôt qu'afficher les bullets.
+ *
+ * On n'utilise PAS scoreCandidate (pas de PDF re-téléchargé, pas d'appel
+ * PDF plus coûteux) : on relit juste la justification existante et on la
+ * passe à Claude pour extraction structurée. Voir
+ * `lib/extractPointsFromJustification.ts` pour le rationale.
+ *
+ * Appel séquentiel (pas parallèle) pour rester sous le rate-limit
+ * Anthropic sur input tokens/min et garder une erreur isolée par
+ * candidature — si une ligne échoue, les autres continuent.
+ */
+export async function backfillPointsForOffre(
+  offreId: string
+): Promise<BackfillResult> {
+  if (!offreId) return { ok: false, error: 'Offre introuvable.' }
+
+  const supabase = await createClient()
+
+  // Cible : candidatures de cette offre, scorées (justification présente)
+  // MAIS sans bullets encore calculés. On ignore les candidatures dont
+  // justification_ia commence par « Scoring IA indisponible » (scoring
+  // raté, rien à structurer — besoin d'un vrai rescore).
+  const { data: rows, error } = await supabase
+    .from('candidatures')
+    .select('id, justification_ia')
+    .eq('offre_id', offreId)
+    .is('points_forts', null)
+    .not('justification_ia', 'is', null)
+
+  if (error) {
+    return { ok: false, error: `Lecture candidatures : ${error.message}` }
+  }
+
+  const candidates = (rows ?? []).filter(
+    (r) =>
+      typeof r.justification_ia === 'string' &&
+      r.justification_ia.trim().length > 0 &&
+      !r.justification_ia.startsWith('Scoring IA indisponible')
+  )
+
+  const total = candidates.length
+  if (total === 0) {
+    return { ok: true, processed: 0, failed: 0, skipped: 0, total: 0 }
+  }
+
+  let processed = 0
+  let failed = 0
+  let skipped = 0
+
+  for (const row of candidates) {
+    try {
+      const { pointsForts, pointsFaibles } =
+        await extractPointsFromJustification(row.justification_ia as string)
+      // Claude a renvoyé du vide (réponse mal formée ou texte trop court) :
+      // on laisse NULL en base plutôt qu'écrire [] — le fallback UI reste
+      // actif et on pourra re-tenter sans avoir figé du vide.
+      if (pointsForts.length === 0 && pointsFaibles.length === 0) {
+        skipped++
+        continue
+      }
+      const { error: updErr } = await supabase
+        .from('candidatures')
+        .update({
+          points_forts: pointsForts,
+          points_faibles: pointsFaibles,
+        })
+        .eq('id', row.id)
+      if (updErr) {
+        console.error(
+          `[backfillPointsForOffre] update échoué (${row.id}) :`,
+          updErr.message
+        )
+        failed++
+        continue
+      }
+      processed++
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error(
+        `[backfillPointsForOffre] extraction échouée (${row.id}) :`,
+        msg
+      )
+      failed++
+    }
+  }
+
+  if (processed > 0) {
+    revalidatePath(`/offres/${offreId}`)
+    revalidatePath('/candidatures')
+    revalidatePath('/candidatures/flottement')
+  }
+
+  return { ok: true, processed, failed, skipped, total }
 }

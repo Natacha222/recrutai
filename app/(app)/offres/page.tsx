@@ -440,8 +440,17 @@ export default async function OffresPage({
                 key={o.id}
                 className="text-sm hover:bg-surface transition align-top"
               >
-                <td className="px-6 py-5 font-mono font-semibold text-brand-purple tabular-nums whitespace-nowrap">
-                  {o.reference ?? <span className="text-muted" aria-label="Non renseigné">—</span>}
+                <td className="px-6 py-5 font-mono font-semibold tabular-nums whitespace-nowrap">
+                  {o.reference ? (
+                    <Link
+                      href={`/offres/${o.id}`}
+                      className="text-brand-purple hover:underline"
+                    >
+                      {o.reference}
+                    </Link>
+                  ) : (
+                    <span className="text-muted" aria-label="Non renseigné">—</span>
+                  )}
                 </td>
                 <td className="px-6 py-5">
                   <Link
