@@ -53,6 +53,7 @@ type SortField =
   | 'ref'
   | 'offre'
   | 'statut'
+  | 'score'
 
 const SORT_FIELDS: Record<SortField, true> = {
   candidat: true,
@@ -61,6 +62,7 @@ const SORT_FIELDS: Record<SortField, true> = {
   ref: true,
   offre: true,
   statut: true,
+  score: true,
 }
 
 function normalizeSort(raw: string | undefined): SortField | '' {
@@ -250,6 +252,17 @@ export default async function CandidaturesPage({
             return mult * frCmp(a._offre?.titre ?? '', b._offre?.titre ?? '')
           case 'statut':
             return mult * frCmp(a.statut ?? '', b.statut ?? '')
+          case 'score': {
+            // Nulls poussés en fin de liste indépendamment du sens, sinon
+            // on aurait un gros tas de « — » qui remonte sur un tri desc
+            // et qui cache les candidatures effectivement scorées.
+            const aS = a.score_ia
+            const bS = b.score_ia
+            if (aS === null && bS === null) return 0
+            if (aS === null) return 1
+            if (bS === null) return -1
+            return mult * (aS - bS)
+          }
           default:
             return 0
         }
@@ -335,7 +348,9 @@ export default async function CandidaturesPage({
               <th scope="col" className="px-3 pt-3 pb-2">
                 <SortHeader field="candidat" label="Candidat" />
               </th>
-              <th scope="col" className="px-3 pt-3 pb-2">Score</th>
+              <th scope="col" className="px-3 pt-3 pb-2">
+                <SortHeader field="score" label="Score" defaultDir="desc" />
+              </th>
               <th scope="col" className="px-3 pt-3 pb-2">
                 <SortHeader field="statut" label="Statut" defaultDir="asc" />
               </th>

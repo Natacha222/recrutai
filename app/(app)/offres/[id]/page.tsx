@@ -14,6 +14,7 @@ import {
   DateFilter,
   FiltersReset,
   SelectFilter,
+  SortHeader,
   TextFilter,
 } from '@/components/TableFilters'
 import CVUploader from './CVUploader'
@@ -23,8 +24,38 @@ import BackfillPointsButton from './BackfillPointsButton'
 type CandidatureFilter = 'qualifié' | 'en attente' | 'rejeté'
 const FILTERS: CandidatureFilter[] = ['qualifié', 'en attente', 'rejeté']
 
-const CAND_FILTER_FIELDS = ['filter', 'cand_q', 'just_q', 'recu_from']
+const CAND_FILTER_FIELDS = [
+  'filter',
+  'cand_q',
+  'just_q',
+  'recu_from',
+  'sort',
+  'dir',
+]
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+// Champs triables du tableau des candidatures. Le tri par défaut (score_ia
+// desc) est appliqué quand aucun `sort` n'est défini — on n'ajoute pas
+// 'score' au record pour ne pas polluer l'URL avec un paramètre redondant
+// qui redescend tout de suite en désactivé au prochain clic sur la même
+// entête.
+type CandSortField = 'candidat' | 'score' | 'statut' | 'date'
+
+const CAND_SORT_FIELDS: Record<CandSortField, true> = {
+  candidat: true,
+  score: true,
+  statut: true,
+  date: true,
+}
+
+function normalizeCandSort(raw: string | undefined): CandSortField | '' {
+  if (!raw) return ''
+  return raw in CAND_SORT_FIELDS ? (raw as CandSortField) : ''
+}
+
+function normalizeCandDir(raw: string | undefined): 'asc' | 'desc' {
+  return raw === 'desc' ? 'desc' : 'asc'
+}
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{
@@ -38,6 +69,11 @@ type SearchParams = Promise<{
   just_q?: string
   /** YYYY-MM-DD — garde les candidatures reçues à cette date ou après. */
   recu_from?: string
+  /** Tri : nom du champ trié (`candidat`, `score`, `statut`, `date`).
+   *  Vide = tri par défaut (score IA desc, nulls en bas). */
+  sort?: string
+  /** Direction du tri : `asc` | `desc`. Ignoré sans `sort`. */
+  dir?: string
 }>
 
 export default async function OffreDetailPage({
@@ -55,12 +91,16 @@ export default async function OffreDetailPage({
     cand_q = '',
     just_q = '',
     recu_from = '',
+    sort,
+    dir,
   } = await searchParams
   const activeFilter: CandidatureFilter | null = FILTERS.includes(
     filter as CandidatureFilter
   )
     ? (filter as CandidatureFilter)
     : null
+  const candSortField = normalizeCandSort(sort)
+  const candSortDir = normalizeCandDir(dir)
   // Ignore silencieusement une date mal formée (param URL corrompu) pour
   // ne pas casser la page — l'input type=date garantit le format ISO.
   const recuFromEffective = ISO_DATE_RE.test(recu_from) ? recu_from : ''
@@ -91,13 +131,16 @@ export default async function OffreDetailPage({
     offrePdfUrl = signed?.signedUrl ?? null
   }
 
+  // Pas de `.order()` côté SQL : le tri effectif est calculé en JS plus bas
+  // pour supporter les colonnes non-triables par PostgREST (aucune ici mais
+  // on garde la symétrie avec /candidatures) et appliquer un défaut
+  // (score_ia desc, nulls en bas) quand aucun `sort` n'est dans l'URL.
   const { data: candidatures } = await supabase
     .from('candidatures')
     .select(
       'id, nom, email, score_ia, justification_ia, points_forts, points_faibles, statut, cv_url, created_at, email_sent_at, email_error'
     )
     .eq('offre_id', id)
-    .order('score_ia', { ascending: false, nullsFirst: false })
 
   const total = candidatures?.length ?? 0
   const qualifies =
@@ -134,6 +177,53 @@ export default async function OffreDetailPage({
     }
     return true
   })
+
+  // Tri : si l'utilisateur a cliqué sur une entête, on applique son choix.
+  // Sinon on retombe sur le tri naturel « meilleur score en haut, nulls
+  // relégués en bas » — c'était l'ancien `.order('score_ia', desc)` côté
+  // SQL, on le reproduit ici pour que les listings non triés restent
+  // actionnables (les candidats les plus pertinents d'abord).
+  const frCmpCand = new Intl.Collator('fr', { sensitivity: 'base' }).compare
+  const cmpScoreDesc = (
+    a: { score_ia: number | null },
+    b: { score_ia: number | null }
+  ): number => {
+    const aS = a.score_ia
+    const bS = b.score_ia
+    if (aS === null && bS === null) return 0
+    if (aS === null) return 1
+    if (bS === null) return -1
+    return bS - aS
+  }
+  const sortedCandidatures = candSortField
+    ? [...filteredCandidatures].sort((a, b) => {
+        const mult = candSortDir === 'asc' ? 1 : -1
+        switch (candSortField) {
+          case 'candidat':
+            return mult * frCmpCand(a.nom ?? '', b.nom ?? '')
+          case 'statut':
+            return mult * frCmpCand(a.statut ?? '', b.statut ?? '')
+          case 'date': {
+            const aD = a.created_at ?? ''
+            const bD = b.created_at ?? ''
+            return mult * (aD < bD ? -1 : aD > bD ? 1 : 0)
+          }
+          case 'score': {
+            // Nulls poussés en fin de liste indépendamment du sens pour
+            // ne pas cacher les candidats scorés derrière un paquet de
+            // « — » en haut quand on tri desc.
+            const aS = a.score_ia
+            const bS = b.score_ia
+            if (aS === null && bS === null) return 0
+            if (aS === null) return 1
+            if (bS === null) return -1
+            return mult * (aS - bS)
+          }
+          default:
+            return 0
+        }
+      })
+    : [...filteredCandidatures].sort(cmpScoreDesc)
   const hasCandFilter = !!(
     activeFilter ||
     candQLower ||
@@ -177,6 +267,13 @@ export default async function OffreDetailPage({
     if (just_q) sp.set('just_q', just_q)
     if (recuFromEffective) sp.set('recu_from', recuFromEffective)
     if (statut) sp.set('filter', statut)
+    // Préserve le tri actif : sans ça, cliquer sur un KPI « resetait » le
+    // tri à son défaut (score IA desc), ce qui cassait le flow quand on
+    // cherche par exemple les qualifiés triés par date.
+    if (candSortField) {
+      sp.set('sort', candSortField)
+      sp.set('dir', candSortDir)
+    }
     const qs = sp.toString()
     return qs ? `/offres/${offreId}?${qs}` : `/offres/${offreId}`
   }
@@ -299,8 +396,8 @@ export default async function OffreDetailPage({
         <div className="px-6 py-4 border-b border-border-soft flex items-start justify-between gap-3 flex-wrap">
           <h2 className="font-semibold pt-1">
             {hasCandFilter
-              ? `${filteredCandidatures.length} résultat${
-                  filteredCandidatures.length > 1 ? 's' : ''
+              ? `${sortedCandidatures.length} résultat${
+                  sortedCandidatures.length > 1 ? 's' : ''
                 } sur ${total}`
               : `Candidatures reçues (${total})`}
           </h2>
@@ -317,11 +414,19 @@ export default async function OffreDetailPage({
         <table className="w-full min-w-[960px]">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <th scope="col" className="px-6 pt-3 pb-2">Candidat / Email</th>
-              <th scope="col" className="px-6 pt-3 pb-2">Score IA</th>
+              <th scope="col" className="px-6 pt-3 pb-2">
+                <SortHeader field="candidat" label="Candidat / Email" />
+              </th>
+              <th scope="col" className="px-6 pt-3 pb-2">
+                <SortHeader field="score" label="Score IA" defaultDir="desc" />
+              </th>
               <th scope="col" className="px-6 pt-3 pb-2 w-1/3">Justification IA</th>
-              <th scope="col" className="px-6 pt-3 pb-2">Statut</th>
-              <th scope="col" className="px-6 pt-3 pb-2">Reçu le</th>
+              <th scope="col" className="px-6 pt-3 pb-2">
+                <SortHeader field="statut" label="Statut" defaultDir="asc" />
+              </th>
+              <th scope="col" className="px-6 pt-3 pb-2">
+                <SortHeader field="date" label="Reçu le" defaultDir="desc" />
+              </th>
               <th scope="col" className="px-6 pt-3 pb-2">CV / Action</th>
             </tr>
             <tr className="align-top">
@@ -346,7 +451,7 @@ export default async function OffreDetailPage({
             </tr>
           </thead>
           <tbody className="divide-y divide-border-soft">
-            {filteredCandidatures.map((c) => (
+            {sortedCandidatures.map((c) => (
               <tr key={c.id} className="text-sm align-top">
                 <td className="px-6 py-4">
                   <div className="font-medium">{c.nom}</div>
@@ -410,7 +515,7 @@ export default async function OffreDetailPage({
                 </td>
               </tr>
             ))}
-            {filteredCandidatures.length === 0 && (
+            {sortedCandidatures.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-6 py-8 text-center text-muted">
                   {hasCandFilter
