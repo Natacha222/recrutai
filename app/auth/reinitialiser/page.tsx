@@ -25,7 +25,7 @@ export default async function ReinitialiserPage({
         className="hidden lg:flex lg:w-1/2 bg-brand-indigo items-end p-12 relative overflow-hidden"
         style={{
           backgroundImage:
-            "linear-gradient(to bottom, rgba(30, 27, 75, 0.45), rgba(30, 27, 75, 0.85)), url('/login-hero.png')",
+            "linear-gradient(to bottom, rgba(30, 27, 75, 0.45), rgba(30, 27, 75, 0.85)), url('/login-hero.webp')",
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}

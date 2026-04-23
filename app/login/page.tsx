@@ -18,7 +18,7 @@ export default async function LoginPage({
         className="hidden lg:flex lg:w-1/2 bg-brand-indigo items-end p-12 relative overflow-hidden"
         style={{
           backgroundImage:
-            "linear-gradient(to bottom, rgba(30, 27, 75, 0.45), rgba(30, 27, 75, 0.85)), url('/login-hero.png')",
+            "linear-gradient(to bottom, rgba(30, 27, 75, 0.45), rgba(30, 27, 75, 0.85)), url('/login-hero.webp')",
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}
@@ -39,10 +39,10 @@ export default async function LoginPage({
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
           <Image
-            src="/logo.png"
+            src="/logo.webp"
             alt="RecrutAI"
-            width={200}
-            height={200}
+            width={400}
+            height={420}
             priority
             className="h-24 w-auto mb-4"
           />

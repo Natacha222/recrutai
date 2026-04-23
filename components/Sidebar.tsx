@@ -125,10 +125,10 @@ export default function Sidebar({
       {/* Logo — remplace l'ancien texte "RecrutAI" */}
       <div className="px-2 py-4">
         <Image
-          src="/logo.png"
+          src="/logo.webp"
           alt="RecrutAI"
-          width={200}
-          height={200}
+          width={400}
+          height={420}
           priority
           className="h-20 w-auto"
         />
