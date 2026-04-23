@@ -160,7 +160,7 @@ export function normalizeClientName(raw: string): string {
  * Classe Tailwind de couleur pour un score IA, en fonction du seuil de
  * qualification de l'offre. Centralise la logique pour qu'elle reste
  * identique partout (tableau de candidatures global, fiche offre,
- * dashboard…). Cohérent avec la bande de flottement (±5 pts) :
+ * dashboard…). Bande de tolérance de 15 pts sous le seuil :
  *
  *   - score >= seuil            → vert   (qualifié)
  *   - score >= seuil - 15       → ambre  (proche ou sous le seuil)

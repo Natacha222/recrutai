@@ -152,9 +152,8 @@ export default async function DashboardPage({
   ]
 
   // ---- Qualité IA : score moyen + répartition pie chart.
-  // Depuis le refactor « CV en attente » (qui remplace l'ancienne carte
-  // Taux de flottement), on n'a plus besoin du seuil côté KPI — seuls
-  // score_ia et statut restent.
+  // On se base uniquement sur score_ia et statut — le seuil de l'offre ne
+  // joue pas ici, il sert juste au calcul du statut dans le scoring.
   const scored = candidatures.filter(
     (c): c is CandidatureRow & { score_ia: number } => c.score_ia !== null
   )

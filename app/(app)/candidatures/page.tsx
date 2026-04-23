@@ -313,19 +313,6 @@ export default async function CandidaturesPage({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">{pageTitle}</h1>
-        <p className="text-sm text-muted mt-1">
-          Filtre par candidat, date, statut, référent, offre ou référence ;
-          clique sur un en-tête de colonne pour trier. Qualifie ou rejette
-          les candidatures en attente directement depuis la colonne Action
-          — la qualification envoie automatiquement l&apos;email au client
-          avec le CV en pièce jointe.{' '}
-          <Link
-            href="/candidatures/flottement"
-            className="text-brand-purple hover:underline"
-          >
-            Voir le flottement →
-          </Link>
-        </p>
       </div>
 
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
@@ -337,53 +324,54 @@ export default async function CandidaturesPage({
           </h2>
           <FiltersReset fields={FILTER_FIELDS} />
         </div>
-        {/* min-w-[1320px] : 10 colonnes (Action ré-ajoutée pour Qualifier /
-            Rejeter en ligne). overflow-x-auto parent prend le relais sous
-            cette largeur pour ne pas squeezer la Justification IA. */}
-        <table className="w-full min-w-[1320px]">
+        {/* min-w-[1180px] : 10 colonnes (Action incluse). Padding des
+            cellules resserré (px-3) et colonne Candidat bornée pour tenir
+            sur un écran standard sans scroll horizontal. overflow-x-auto
+            parent prend le relais sous cette largeur. */}
+        <table className="w-full min-w-[1180px]">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <th scope="col" className="px-4 pt-3 pb-2">CV</th>
-              <th scope="col" className="px-4 pt-3 pb-2">
+              <th scope="col" className="px-3 pt-3 pb-2">CV</th>
+              <th scope="col" className="px-3 pt-3 pb-2">
                 <SortHeader field="candidat" label="Candidat" />
               </th>
-              <th scope="col" className="px-4 pt-3 pb-2">Score</th>
-              <th scope="col" className="px-4 pt-3 pb-2">
+              <th scope="col" className="px-3 pt-3 pb-2">Score</th>
+              <th scope="col" className="px-3 pt-3 pb-2">
                 <SortHeader field="statut" label="Statut" defaultDir="asc" />
               </th>
-              <th scope="col" className="px-4 pt-3 pb-2">Justification IA</th>
-              <th scope="col" className="px-4 pt-3 pb-2">
+              <th scope="col" className="px-3 pt-3 pb-2">Justification IA</th>
+              <th scope="col" className="px-3 pt-3 pb-2">
                 <SortHeader field="ref_offre" label="Réf." />
               </th>
-              <th scope="col" className="px-4 pt-3 pb-2">
+              <th scope="col" className="px-3 pt-3 pb-2">
                 <SortHeader field="offre" label="Offre" />
               </th>
-              <th scope="col" className="px-4 pt-3 pb-2">
+              <th scope="col" className="px-3 pt-3 pb-2">
                 <SortHeader field="ref" label="Référent" />
               </th>
-              <th scope="col" className="px-4 pt-3 pb-2">
+              <th scope="col" className="px-3 pt-3 pb-2">
                 <SortHeader field="date" label="Date" defaultDir="desc" />
               </th>
-              <th scope="col" className="px-4 pt-3 pb-2">Action</th>
+              <th scope="col" className="px-3 pt-3 pb-2">Action</th>
             </tr>
             <tr className="align-top">
-              <th className="px-4 pt-0 pb-3"></th>
-              <th className="px-4 pt-0 pb-3 font-normal normal-case">
+              <th className="px-3 pt-0 pb-3"></th>
+              <th className="px-3 pt-0 pb-3 font-normal normal-case">
                 <TextFilter field="candidat" placeholder="Nom…" />
               </th>
-              <th className="px-4 pt-0 pb-3"></th>
-              <th className="px-4 pt-0 pb-3 font-normal normal-case">
+              <th className="px-3 pt-0 pb-3"></th>
+              <th className="px-3 pt-0 pb-3 font-normal normal-case">
                 <SelectFilter
                   field="statut"
                   options={[...STATUTS]}
                   placeholder="Tous"
                 />
               </th>
-              <th className="px-4 pt-0 pb-3"></th>
-              <th className="px-4 pt-0 pb-3 font-normal normal-case">
+              <th className="px-3 pt-0 pb-3"></th>
+              <th className="px-3 pt-0 pb-3 font-normal normal-case">
                 <TextFilter field="ref_offre" placeholder="Réf…" />
               </th>
-              <th className="px-4 pt-0 pb-3 font-normal normal-case">
+              <th className="px-3 pt-0 pb-3 font-normal normal-case">
                 <SelectFilter
                   field="offre_id"
                   options={offresOptions.map((o) => o.id)}
@@ -393,17 +381,17 @@ export default async function CandidaturesPage({
                   placeholder="Toutes"
                 />
               </th>
-              <th className="px-4 pt-0 pb-3 font-normal normal-case">
+              <th className="px-3 pt-0 pb-3 font-normal normal-case">
                 <SelectFilter
                   field="ref"
                   options={amReferents}
                   placeholder="Tous"
                 />
               </th>
-              <th className="px-4 pt-0 pb-3 font-normal normal-case">
+              <th className="px-3 pt-0 pb-3 font-normal normal-case">
                 <DateFilter field="date" />
               </th>
-              <th className="px-4 pt-0 pb-3"></th>
+              <th className="px-3 pt-0 pb-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-soft">
@@ -423,7 +411,7 @@ export default async function CandidaturesPage({
                     : 'text-muted'
               return (
                 <tr key={c.id} className="text-sm align-top">
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     {c.cv_url ? (
                       <a
                         href={c.cv_url}
@@ -437,12 +425,18 @@ export default async function CandidaturesPage({
                       <span className="text-muted" aria-label="Non renseigné">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 min-w-0">
-                    <div className="font-medium">{c.nom?.trim() || '—'}</div>
+                  <td className="px-3 py-3 min-w-0 max-w-[11rem]">
+                    <div
+                      className="font-medium truncate"
+                      title={c.nom?.trim() || undefined}
+                    >
+                      {c.nom?.trim() || '—'}
+                    </div>
                     {hasRealEmail ? (
                       <a
                         href={`mailto:${c.email}`}
-                        className="text-xs text-brand-purple hover:underline"
+                        className="block text-xs text-brand-purple hover:underline truncate"
+                        title={c.email ?? undefined}
                       >
                         {c.email}
                       </a>
@@ -452,7 +446,7 @@ export default async function CandidaturesPage({
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-3 py-3 whitespace-nowrap">
                     <span
                       className={`font-bold text-lg ${scoreColor(c.score_ia, offre?.seuil ?? null)}`}
                     >
@@ -465,7 +459,7 @@ export default async function CandidaturesPage({
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <StatusBadge status={c.statut ?? 'en attente'} />
                     {raison && (
                       <div
@@ -487,17 +481,17 @@ export default async function CandidaturesPage({
                       />
                     )}
                   </td>
-                  <td className="px-4 py-3 max-w-sm min-w-[13rem]">
+                  <td className="px-3 py-3 max-w-xs min-w-[11rem]">
                     <JustificationIA
                       pointsForts={c.points_forts}
                       pointsFaibles={c.points_faibles}
                       justification={c.justification_ia}
                     />
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted font-mono whitespace-nowrap">
+                  <td className="px-3 py-3 text-xs text-muted font-mono whitespace-nowrap">
                     {offre?.reference ?? '—'}
                   </td>
-                  <td className="px-4 py-3 min-w-0">
+                  <td className="px-3 py-3 min-w-0">
                     {offre ? (
                       <Link
                         href={`/offres/${offre.id}`}
@@ -509,15 +503,15 @@ export default async function CandidaturesPage({
                       <span className="text-muted" aria-label="Non renseigné">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-muted whitespace-nowrap">
+                  <td className="px-3 py-3 text-muted whitespace-nowrap">
                     {offre?.am_referent ?? '—'}
                   </td>
-                  <td className="px-4 py-3 text-muted text-xs tabular-nums whitespace-nowrap">
+                  <td className="px-3 py-3 text-muted text-xs tabular-nums whitespace-nowrap">
                     {fmtDate(c.created_at)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     {isEnAttente ? (
-                      <CandidatureActions candidatureId={c.id} />
+                      <CandidatureActions candidatureId={c.id} compact />
                     ) : (
                       <span className="text-muted" aria-label="Aucune action disponible">
                         —
@@ -531,7 +525,7 @@ export default async function CandidaturesPage({
               <tr>
                 <td
                   colSpan={10}
-                  className="px-4 py-8 text-center text-muted text-sm"
+                  className="px-3 py-8 text-center text-muted text-sm"
                 >
                   {totalAll === 0
                     ? 'Aucune candidature pour le moment.'

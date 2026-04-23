@@ -12,8 +12,8 @@ type Props = {
    *  quand les arrays sont vides ET affiché en version dépliée pour tout
    *  le contexte. */
   justification: string | null
-  /** Contexte d'affichage : `table` pour les listings denses (justification
-   *  et flottement) — préfixe les titres avec un petit badge couleur et
+  /** Contexte d'affichage : `table` pour les listings denses (liste globale
+   *  des candidatures) — préfixe les titres avec un petit badge couleur et
    *  compacte le vertical. `card` pour les vues détail (fiche offre). */
   variant?: 'table' | 'card'
 }

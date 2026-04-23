@@ -494,7 +494,6 @@ export async function ingestCVs({
   revalidatePath('/offres')
   revalidatePath('/dashboard')
   revalidatePath('/candidatures')
-  revalidatePath('/candidatures/flottement')
   return {
     ok: true,
     notifications: {
@@ -575,11 +574,10 @@ export async function qualifyCandidature(
 
   revalidatePath(`/offres/${cand.offre_id}`)
   revalidatePath('/dashboard')
-  // Listes globales de candidatures (dashboard drill-downs) : un candidat
-  // qualifié change de part dans le camembert et disparaît de la liste
-  // « en attente » / flottement.
+  // Liste globale des candidatures (dashboard drill-down) : un candidat
+  // qualifié change de part dans le camembert et disparaît du filtre « en
+  // attente ».
   revalidatePath('/candidatures')
-  revalidatePath('/candidatures/flottement')
 
   // Helper local : persiste l'échec + renvoie le warning à l'UI. On
   // persiste dans TOUS les cas d'échec (technique ou volontaire) pour
@@ -704,7 +702,6 @@ export async function rejectCandidature(
     revalidatePath(`/offres/${cand.offre_id}`)
     revalidatePath('/dashboard')
     revalidatePath('/candidatures')
-    revalidatePath('/candidatures/flottement')
   }
   return { ok: true }
 }
@@ -814,7 +811,6 @@ export async function backfillPointsForOffre(
   if (processed > 0) {
     revalidatePath(`/offres/${offreId}`)
     revalidatePath('/candidatures')
-    revalidatePath('/candidatures/flottement')
   }
 
   return { ok: true, processed, failed, skipped, total }

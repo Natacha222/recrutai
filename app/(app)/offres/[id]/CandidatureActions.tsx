@@ -5,10 +5,18 @@ import { qualifyCandidature, rejectCandidature } from './actions'
 
 type Status = 'idle' | 'success' | 'error'
 
+/**
+ * `compact` : variante resserrée pour les tableaux denses (ex :
+ * /candidatures liste globale). Boutons plus petits, moins de min-width,
+ * feedback inline plus discret. Par défaut on garde la version « md »
+ * utilisée sur /offres/[id] où il y a plus de place.
+ */
 export default function CandidatureActions({
   candidatureId,
+  compact = false,
 }: {
   candidatureId: string
+  compact?: boolean
 }) {
   const [isPending, startTransition] = useTransition()
   const [status, setStatus] = useState<Status>('idle')
@@ -61,15 +69,25 @@ export default function CandidatureActions({
     })
   }
 
+  const rootClass = compact
+    ? 'flex flex-col gap-1 min-w-[8.5rem]'
+    : 'flex flex-col gap-2 min-w-[11rem]'
+  const btnQualifyClass = compact
+    ? 'px-2 py-1 rounded bg-status-green text-white text-xs font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed'
+    : 'px-3 py-2 rounded-md bg-status-green text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed'
+  const btnRejectClass = compact
+    ? 'px-2 py-1 rounded bg-status-red text-white text-xs font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed'
+    : 'px-3 py-2 rounded-md bg-status-red text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed'
+
   return (
-    <div className="flex flex-col gap-2 min-w-[11rem]">
-      <div className="flex gap-2">
+    <div className={rootClass}>
+      <div className="flex gap-1.5">
         <button
           type="button"
           onClick={handleQualify}
           disabled={isPending}
           aria-label="Qualifier le candidat"
-          className="px-3 py-2 rounded-md bg-status-green text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+          className={btnQualifyClass}
         >
           <span aria-hidden="true">✓</span> Qualifier
         </button>
@@ -78,7 +96,7 @@ export default function CandidatureActions({
           onClick={handleReject}
           disabled={isPending}
           aria-label="Rejeter le candidat"
-          className="px-3 py-2 rounded-md bg-status-red text-white text-sm font-semibold hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+          className={btnRejectClass}
         >
           <span aria-hidden="true">✗</span> Rejeter
         </button>
