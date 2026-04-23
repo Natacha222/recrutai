@@ -42,7 +42,10 @@ export default async function NouvelleOffrePage({
       <h1 className="text-2xl font-bold mb-6">Offre d&apos;emploi</h1>
 
       {error && (
-        <div className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
+        <div
+          role="alert"
+          className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm"
+        >
           {error}
         </div>
       )}

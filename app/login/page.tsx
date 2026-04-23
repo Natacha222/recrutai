@@ -54,12 +54,18 @@ export default async function LoginPage({
           </p>
 
           {error && (
-            <div className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
+            <div
+              role="alert"
+              className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm"
+            >
               {error}
             </div>
           )}
           {reset_sent && (
-            <div className="mb-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
+            <div
+              role="status"
+              className="mb-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm"
+            >
               Si un compte existe pour cette adresse, un email de
               réinitialisation vient d&apos;être envoyé. Vérifie ta boîte de
               réception.

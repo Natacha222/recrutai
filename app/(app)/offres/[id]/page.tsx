@@ -325,12 +325,18 @@ export default async function OffreDetailPage({
       </div>
 
       {error && (
-        <div className="px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
+        <div
+          role="alert"
+          className="px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm"
+        >
           {error}
         </div>
       )}
       {saved && (
-        <div className="px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
+        <div
+          role="status"
+          className="px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm"
+        >
           Modifications enregistrées.
         </div>
       )}

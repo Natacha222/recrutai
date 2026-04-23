@@ -639,6 +639,53 @@ function CreateClientModal({
   const [amReferent, setAmReferent] = useState(defaultReferent ?? '')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const formRef = useRef<HTMLFormElement | null>(null)
+  const firstInputRef = useRef<HTMLInputElement | null>(null)
+
+  // A11y : à l'ouverture, on place le focus sur le 1er champ (Nom) pour
+  // que l'utilisateur clavier puisse saisir directement sans re-tabber
+  // depuis la sidebar. Sans ça, le focus resterait sur le bouton « Ajouter
+  // un client » derrière la modale.
+  useEffect(() => {
+    firstInputRef.current?.focus()
+  }, [])
+
+  // A11y — focus trap + Escape. La modale doit capturer le focus clavier
+  // tant qu'elle est ouverte (WCAG 2.4.3) : sans ça, un coup de Tab emmène
+  // l'utilisateur sur le formulaire derrière, ce qui casse la promesse du
+  // « modal ». On intercepte :
+  //   - Escape → fermeture (alignée sur le comportement attendu des
+  //     dialogs depuis Windows 95)
+  //   - Tab / Shift+Tab en bord de modale → on boucle sur le premier
+  //     ou le dernier élément focusable.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const form = formRef.current
+      if (!form) return
+      const focusables = form.querySelectorAll<HTMLElement>(
+        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -669,11 +716,23 @@ function CreateClientModal({
       onClick={onClose}
     >
       <form
+        ref={formRef}
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-xl p-6 max-w-md w-full space-y-4 max-h-[90vh] overflow-y-auto"
+        // A11y — rôle de dialog modal : informe les technologies
+        // d'assistance que le reste de la page est inerte et que le titre
+        // (aria-labelledby) décrit la boîte de dialogue.
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-client-modal-title"
       >
-        <h2 className="font-bold text-lg">Créer un nouveau client</h2>
+        <h2
+          id="create-client-modal-title"
+          className="font-bold text-lg"
+        >
+          Créer un nouveau client
+        </h2>
 
         <div>
           <label
@@ -684,6 +743,7 @@ function CreateClientModal({
           </label>
           <input
             id="client-modal-nom"
+            ref={firstInputRef}
             type="text"
             required
             value={nom}
@@ -699,10 +759,14 @@ function CreateClientModal({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-brand-indigo-text mb-1">
+          <label
+            htmlFor="client-modal-secteur"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
             Secteur <span className="text-status-red">*</span>
           </label>
           <input
+            id="client-modal-secteur"
             type="text"
             required
             value={secteur}
@@ -713,10 +777,14 @@ function CreateClientModal({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-brand-indigo-text mb-1">
+          <label
+            htmlFor="client-modal-email"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
             Email de notification <span className="text-status-red">*</span>
           </label>
           <input
+            id="client-modal-email"
             type="email"
             required
             value={email}
@@ -731,10 +799,14 @@ function CreateClientModal({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-brand-indigo-text mb-1">
+          <label
+            htmlFor="client-modal-formule"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
             Formule
           </label>
           <select
+            id="client-modal-formule"
             value={formule}
             onChange={(e) => setFormule(e.target.value)}
             className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"
@@ -748,10 +820,14 @@ function CreateClientModal({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-brand-indigo-text mb-1">
+          <label
+            htmlFor="client-modal-referent"
+            className="block text-sm font-medium text-brand-indigo-text mb-1"
+          >
             Référent
           </label>
           <select
+            id="client-modal-referent"
             value={amReferent}
             onChange={(e) => setAmReferent(e.target.value)}
             className="w-full px-3 py-2 border border-border-soft rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-brand-purple"

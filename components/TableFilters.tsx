@@ -63,6 +63,11 @@ export function TextFilter({
       // et tests e2e peuvent cibler l'input par son nom sémantique.
       name={field}
       placeholder={placeholder}
+      // A11y : les filtres vivent dans l'en-tête des tables et n'ont pas
+      // de <label> visible. `placeholder` seul n'est PAS un nom
+      // accessible (disparaît dès qu'on tape) : on donne un aria-label
+      // explicite pour que les lecteurs d'écran annoncent la colonne.
+      aria-label={`Filtrer par ${placeholder.toLowerCase()}`}
       value={value}
       onChange={(e) => handleChange(e.target.value)}
       className={CELL_INPUT_CLASS}
@@ -90,6 +95,10 @@ export function DateFilter({
       value={urlValue}
       onChange={(e) => update(e.target.value)}
       placeholder={placeholder}
+      // A11y : voir TextFilter. Fallback sur 'date' si placeholder absent
+      // (le navigateur affiche déjà son libellé mais pas toujours au
+      // lecteur d'écran).
+      aria-label={`Filtrer par ${(placeholder ?? 'date').toLowerCase()}`}
       className={CELL_INPUT_CLASS}
     />
   )
@@ -114,6 +123,9 @@ export function SelectFilter({
       value={urlValue}
       onChange={(e) => update(e.target.value)}
       disabled={options.length === 0}
+      // A11y : voir TextFilter. Le <option value=""> fait office de
+      // placeholder mais n'est pas lu comme nom du contrôle.
+      aria-label={`Filtrer par ${placeholder.toLowerCase()}`}
       className={CELL_INPUT_CLASS}
     >
       <option value="">{placeholder}</option>

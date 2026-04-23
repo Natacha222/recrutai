@@ -25,3 +25,20 @@ html, body {
   color: var(--color-brand-indigo-text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
+
+/* A11y — focus visible par défaut sur boutons & liens.
+   Tailwind v4 pose `outline: 0 solid currentColor` sur tout dans le
+   preflight : sans ça, un utilisateur au clavier n'a AUCUN retour
+   visuel en tabbant sur un <button>/<a> qui n'a pas son propre
+   `focus:ring-*`. On rétablit un outline violet 2px visible uniquement
+   au focus clavier (pas au clic souris), conforme WCAG 2.4.7.
+   Les composants peuvent toujours surcharger avec `focus:ring-*` —
+   l'outline reste visible par-dessus, ce qui ne dégrade rien. */
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[role="button"]:focus-visible,
+[role="link"]:focus-visible {
+  outline: 2px solid var(--color-brand-purple);
+  outline-offset: 2px;
+}

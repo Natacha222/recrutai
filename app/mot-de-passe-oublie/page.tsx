@@ -43,7 +43,10 @@ export default async function MotDePasseOubliePage({
           </p>
 
           {error && (
-            <div className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
+            <div
+              role="alert"
+              className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm"
+            >
               {error}
             </div>
           )}

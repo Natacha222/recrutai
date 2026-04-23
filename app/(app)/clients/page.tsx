@@ -245,13 +245,19 @@ export default async function ClientsPage({
       </div>
 
       {saved && (
-        <div className="mb-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm">
+        <div
+          role="status"
+          className="mb-4 px-3 py-2 rounded-md bg-status-green-bg text-status-green text-sm"
+        >
           Client «&nbsp;{saved}&nbsp;» mis à jour.
         </div>
       )}
 
       {error && (
-        <div className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm">
+        <div
+          role="alert"
+          className="mb-4 px-3 py-2 rounded-md bg-status-red-bg text-status-red text-sm"
+        >
           {error}
         </div>
       )}
