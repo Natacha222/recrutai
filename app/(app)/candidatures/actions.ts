@@ -10,12 +10,13 @@ import {
 import { effectiveStatut } from '@/lib/format'
 
 /**
- * Relance le scoring IA sur une candidature existante, sans toucher à ses
- * nom/email (pour ça il faut passer par /candidatures/incompletes qui fait
- * update + rescore). Cible typique : candidatures dont le 1er scoring a
- * planté (justification_ia commence par « Scoring IA indisponible »).
+ * Relance le scoring IA sur une candidature existante (typiquement quand le
+ * 1er scoring a planté : justification_ia commence par « Scoring IA
+ * indisponible »). Le nom/email extraits par l'IA au 1er passage restent
+ * inchangés — et sont d'ailleurs non-bloquants pour l'envoi client : le CV
+ * PDF part en pièce jointe, le client voit le candidat directement dedans.
  *
- * Comportement miroir de updateCandidatureInfo :
+ * Étapes :
  *   - Vérifie que l'offre est active (sinon on rescore mais pas d'email)
  *   - Télécharge le CV depuis Storage
  *   - Appelle scoreCandidate
@@ -123,6 +124,8 @@ export async function rescoreCandidature(
   // Rescore.
   let newScore: number
   let newJustification: string
+  let newPointsForts: string[] = []
+  let newPointsFaibles: string[] = []
   let newStatut: string
   try {
     const res = await scoreCandidate({
@@ -132,6 +135,8 @@ export async function rescoreCandidature(
     })
     newScore = res.score
     newJustification = res.justification
+    newPointsForts = res.pointsForts
+    newPointsFaibles = res.pointsFaibles
     newStatut = res.statut
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -147,6 +152,8 @@ export async function rescoreCandidature(
     .update({
       score_ia: newScore,
       justification_ia: newJustification,
+      points_forts: newPointsForts,
+      points_faibles: newPointsFaibles,
       statut: newStatut,
     })
     .eq('id', candidatureId)
@@ -160,7 +167,6 @@ export async function rescoreCandidature(
   const revalidateAll = () => {
     revalidatePath('/candidatures')
     revalidatePath('/candidatures/flottement')
-    revalidatePath('/candidatures/incompletes')
     revalidatePath('/dashboard')
     revalidatePath(`/offres/${offre.id}`)
   }
@@ -242,6 +248,8 @@ export async function rescoreCandidature(
     score: newScore,
     seuil: offre.seuil,
     justification: newJustification,
+    pointsForts: newPointsForts,
+    pointsFaibles: newPointsFaibles,
     cvBuffer,
     cvFilename: cand.cv_filename || `CV-${cand.nom ?? 'candidat'}.pdf`,
   })
@@ -297,6 +305,8 @@ type ResendCandRow = {
   email: string | null
   score_ia: number | null
   justification_ia: string | null
+  points_forts: string[] | null
+  points_faibles: string[] | null
   statut: string | null
   cv_path: string | null
   cv_filename: string | null
@@ -338,7 +348,7 @@ export async function resendQualifiedEmail(
   const { data: candRaw, error: candErr } = await supabase
     .from('candidatures')
     .select(
-      'id, offre_id, nom, email, score_ia, justification_ia, statut, cv_path, cv_filename, offres(id, titre, reference, seuil, statut, date_validite, clients(contact_email))'
+      'id, offre_id, nom, email, score_ia, justification_ia, points_forts, points_faibles, statut, cv_path, cv_filename, offres(id, titre, reference, seuil, statut, date_validite, clients(contact_email))'
     )
     .eq('id', candidatureId)
     .single()
@@ -367,7 +377,6 @@ export async function resendQualifiedEmail(
   const revalidateAll = () => {
     revalidatePath('/candidatures')
     revalidatePath('/candidatures/flottement')
-    revalidatePath('/candidatures/incompletes')
     revalidatePath('/dashboard')
     revalidatePath(`/offres/${offre.id}`)
   }
@@ -432,6 +441,8 @@ export async function resendQualifiedEmail(
     score: cand.score_ia ?? 0,
     seuil: offre.seuil,
     justification: cand.justification_ia ?? '',
+    pointsForts: cand.points_forts,
+    pointsFaibles: cand.points_faibles,
     cvBuffer,
     cvFilename: cand.cv_filename || `CV-${cand.nom ?? 'candidat'}.pdf`,
   })

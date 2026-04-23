@@ -59,6 +59,9 @@ export function TextFilter({
   return (
     <input
       type="search"
+      // name = field : autofill, labellisation par les outils d'accessibilité
+      // et tests e2e peuvent cibler l'input par son nom sémantique.
+      name={field}
       placeholder={placeholder}
       value={value}
       onChange={(e) => handleChange(e.target.value)}
@@ -83,6 +86,7 @@ export function DateFilter({
   return (
     <input
       type="date"
+      name={field}
       value={urlValue}
       onChange={(e) => update(e.target.value)}
       placeholder={placeholder}
@@ -106,6 +110,7 @@ export function SelectFilter({
   const { urlValue, update } = useUrlFilter(field)
   return (
     <select
+      name={field}
       value={urlValue}
       onChange={(e) => update(e.target.value)}
       disabled={options.length === 0}
@@ -147,6 +152,81 @@ export function FiltersReset({ fields }: { fields: string[] }) {
       className="text-xs text-brand-purple hover:underline"
     >
       Réinitialiser les filtres
+    </button>
+  )
+}
+
+/**
+ * En-tête de colonne cliquable qui pilote un tri URL `?sort=<field>&dir=…`.
+ *
+ * Cycle 3 états au clic pour permettre un retour à l'ordre par défaut
+ * sans passer par le bouton de reset :
+ *   inactif → défaut (asc ou desc selon `defaultDir`) → direction inverse
+ *   → inactif (tri retiré de l'URL).
+ *
+ * Seule UNE colonne peut être triée à la fois : cliquer un autre en-tête
+ * écrase `sort` + `dir` (comportement standard type Notion/Airtable).
+ */
+export function SortHeader({
+  field,
+  label,
+  defaultDir = 'asc',
+}: {
+  field: string
+  label: string
+  /** Direction du 1er clic. `desc` pour dates et scores (récent/haut
+   *  d'abord), `asc` pour alpha. */
+  defaultDir?: 'asc' | 'desc'
+}) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [, startTransition] = useTransition()
+
+  const currentSort = searchParams.get('sort') ?? ''
+  const currentDir = (searchParams.get('dir') ?? '') as 'asc' | 'desc' | ''
+  const isActive = currentSort === field
+  const dir = isActive ? currentDir : ''
+
+  function handleClick() {
+    const sp = new URLSearchParams(searchParams.toString())
+    if (!isActive) {
+      sp.set('sort', field)
+      sp.set('dir', defaultDir)
+    } else if (dir === defaultDir) {
+      sp.set('sort', field)
+      sp.set('dir', defaultDir === 'asc' ? 'desc' : 'asc')
+    } else {
+      // 3e clic : on retire le tri → retour à l'ordre serveur par défaut.
+      sp.delete('sort')
+      sp.delete('dir')
+    }
+    const qs = sp.toString()
+    startTransition(() => {
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    })
+  }
+
+  // Flèche ↑/↓ quand actif, double-flèche neutre sinon (signale la
+  // possibilité de trier sans attirer l'œil avant le clic).
+  const arrow = dir === 'asc' ? '↑' : dir === 'desc' ? '↓' : '⇅'
+  const arrowClass = isActive ? 'text-brand-purple' : 'text-muted/50'
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="inline-flex items-center gap-1 uppercase font-semibold hover:text-brand-purple transition-colors"
+      aria-label={
+        isActive
+          ? `Trier par ${label} (${dir === 'asc' ? 'ascendant' : 'descendant'})`
+          : `Trier par ${label}`
+      }
+    >
+      <span>{label}</span>
+      <span className={arrowClass} aria-hidden>
+        {arrow}
+      </span>
     </button>
   )
 }

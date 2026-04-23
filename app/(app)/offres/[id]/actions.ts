@@ -90,6 +90,28 @@ export async function updateOffre(formData: FormData) {
     )
   }
 
+  // Pré-check d'unicité de la référence (case-insensitive) en excluant
+  // l'offre éditée elle-même. Symétrique de createOffre — même rationale
+  // (doublons historiques en DB interdisent l'index unique). Permet à un
+  // AM de sauvegarder sans changer la référence même si elle est déjà
+  // dupliquée ailleurs : on vérifie seulement qu'il ne crée pas UN
+  // NOUVEAU doublon via ce save.
+  const refLower = reference.toLowerCase()
+  const { data: existingRefs } = await supabase
+    .from('offres')
+    .select('id, reference')
+    .neq('id', id)
+  const duplicate = (existingRefs ?? []).find(
+    (o) => (o.reference ?? '').toLowerCase().trim() === refLower
+  )
+  if (duplicate) {
+    return redirect(
+      `/offres/${id}/modifier?error=${encodeURIComponent(
+        `La référence « ${reference} » est déjà utilisée par une autre offre. Choisis-en une différente.`
+      )}`
+    )
+  }
+
   // La date future est déjà validée plus haut : sauvegarder une offre avec
   // une date valide signifie qu'elle est active. Une éventuelle clôture
   // manuelle (« clos » en DB) est donc réinitialisée à chaque édition, ce
@@ -210,6 +232,11 @@ export async function ingestCVs({
       email: string
       score_ia: number
       justification_ia: string
+      // `null` quand le scoring a échoué (vs `[]` qui veut dire « IA OK
+      // mais rien à souligner »). L'UI côté JustificationIA s'appuie sur
+      // ce distinguo pour retomber sur la justification brute.
+      points_forts: string[] | null
+      points_faibles: string[] | null
       statut: string
       cv_url: string | null
       cv_path: string
@@ -261,6 +288,8 @@ export async function ingestCVs({
     let score = 0
     let justification = ''
     let statut = 'en attente'
+    let pointsForts: string[] = []
+    let pointsFaibles: string[] = []
     let extractedName: string | undefined
     let extractedEmail: string | undefined
     let scoringFailed = false
@@ -272,6 +301,8 @@ export async function ingestCVs({
       })
       score = res.score
       justification = res.justification
+      pointsForts = res.pointsForts
+      pointsFaibles = res.pointsFaibles
       statut = res.statut
       extractedName = res.candidateName
       extractedEmail = res.candidateEmail
@@ -292,6 +323,11 @@ export async function ingestCVs({
         email,
         score_ia: score,
         justification_ia: justification,
+        // `null` (et non `[]`) quand l'IA a planté : permet à l'UI de
+        // distinguer « scoring en erreur » vs « scoring OK, pas de
+        // force/faiblesse ressortie » → fallback sur justification brute.
+        points_forts: scoringFailed ? null : pointsForts,
+        points_faibles: scoringFailed ? null : pointsFaibles,
         statut,
         cv_url: signed?.signedUrl ?? null,
         cv_path: u.path,
@@ -425,6 +461,8 @@ export async function ingestCVs({
           score: p.row.score_ia,
           seuil: offre.seuil,
           justification: p.row.justification_ia,
+          pointsForts: p.row.points_forts,
+          pointsFaibles: p.row.points_faibles,
           cvBuffer: p.cvBuffer,
           cvFilename: p.upload.filename,
         })
@@ -456,7 +494,6 @@ export async function ingestCVs({
   revalidatePath('/dashboard')
   revalidatePath('/candidatures')
   revalidatePath('/candidatures/flottement')
-  revalidatePath('/candidatures/incompletes')
   return {
     ok: true,
     notifications: {
@@ -490,7 +527,7 @@ export async function qualifyCandidature(
   const { data: cand, error: candErr } = await supabase
     .from('candidatures')
     .select(
-      'id, offre_id, nom, email, score_ia, justification_ia, cv_path, cv_filename'
+      'id, offre_id, nom, email, score_ia, justification_ia, points_forts, points_faibles, cv_path, cv_filename'
     )
     .eq('id', candidatureId)
     .single()
@@ -542,7 +579,6 @@ export async function qualifyCandidature(
   // « en attente » / flottement.
   revalidatePath('/candidatures')
   revalidatePath('/candidatures/flottement')
-  revalidatePath('/candidatures/incompletes')
 
   // Helper local : persiste l'échec + renvoie le warning à l'UI. On
   // persiste dans TOUS les cas d'échec (technique ou volontaire) pour
@@ -610,6 +646,8 @@ export async function qualifyCandidature(
     score: cand.score_ia ?? 0,
     seuil: offre.seuil,
     justification: cand.justification_ia ?? '',
+    pointsForts: cand.points_forts ?? null,
+    pointsFaibles: cand.points_faibles ?? null,
     cvBuffer,
     cvFilename: cand.cv_filename || `CV-${cand.nom}.pdf`,
   })
@@ -666,7 +704,6 @@ export async function rejectCandidature(
     revalidatePath('/dashboard')
     revalidatePath('/candidatures')
     revalidatePath('/candidatures/flottement')
-    revalidatePath('/candidatures/incompletes')
   }
   return { ok: true }
 }

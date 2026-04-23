@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { referentFromEmail } from '@/lib/format'
+import { referentFromUser } from '@/lib/format'
 import { getAvailableReferents } from '@/lib/referents'
 import { FIELD_LIMITS } from '@/lib/validation'
 import { createClientAction } from './actions'
@@ -28,7 +28,13 @@ export default async function NouveauClientPage({
   // sélectionner même s'il n'a encore aucun client ni aucune offre.
   const supabase = await createClient()
   const userRes = await supabase.auth.getUser()
-  const defaultReferent = referentFromEmail(userRes.data.user?.email)
+  // On lit user_metadata.prenom/nom en priorité (renseignés à l'inscription)
+  // — fallback sur une heuristique email uniquement si la metadata est vide.
+  // Voir `referentFromUser` pour le détail : c'est aussi ce qui évite les
+  // cas comme `goumiriaziz.pro@gmail.com` → « G. PRO » (faux).
+  const defaultReferent = userRes.data.user
+    ? referentFromUser(userRes.data.user)
+    : null
   const availableReferents = await getAvailableReferents(supabase, [
     defaultReferent,
   ])
@@ -62,12 +68,14 @@ export default async function NouveauClientPage({
         <Field
           label="Secteur"
           name="secteur"
+          required
           maxLength={FIELD_LIMITS.client_secteur}
         />
         <Field
           label="Email de notification"
           name="contact_email"
           type="email"
+          required
           maxLength={FIELD_LIMITS.email}
         />
 
@@ -163,6 +171,15 @@ function Field({
         required={required}
         placeholder={placeholder}
         maxLength={maxLength}
+        // `type="email"` seul accepte `user@host` (sans TLD) — HTML5
+        // n'exige pas de point. On durcit avec un pattern aligné sur
+        // isValidEmail côté serveur : local@domaine.tld minimum.
+        pattern={type === 'email' ? '[^\\s@]+@[^\\s@]+\\.[^\\s@]+' : undefined}
+        title={
+          type === 'email'
+            ? 'Format attendu : prenom.nom@domaine.fr (le domaine doit contenir un point).'
+            : undefined
+        }
         className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
       />
     </div>

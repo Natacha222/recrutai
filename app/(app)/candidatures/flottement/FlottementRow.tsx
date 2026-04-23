@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import StatusBadge from '@/components/StatusBadge'
+import JustificationIA from '@/components/JustificationIA'
 import {
   qualifyCandidature,
   rejectCandidature,
@@ -16,6 +17,8 @@ type Props = {
   seuil: number
   statut: string
   justificationIa: string | null
+  pointsForts: string[] | null
+  pointsFaibles: string[] | null
   cvUrl: string | null
   offreId: string
   offreTitre: string
@@ -36,6 +39,8 @@ export default function FlottementRow({
   seuil,
   statut,
   justificationIa,
+  pointsForts,
+  pointsFaibles,
   cvUrl,
   offreId,
   offreTitre,
@@ -68,6 +73,15 @@ export default function FlottementRow({
   }
 
   function handleReject() {
+    // Confirmation explicite : voir CandidatureActions.handleReject pour le
+    // rationale. En flottement on tranche souvent vite, donc un garde-fou
+    // est encore plus utile ici.
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm('Rejeter cette candidature ?')
+    ) {
+      return
+    }
     setFeedback(null)
     startTransition(async () => {
       const res = await rejectCandidature(id)
@@ -154,8 +168,12 @@ export default function FlottementRow({
         </div>
         <StatusBadge status={statut} />
       </td>
-      <td className="px-4 py-4 text-muted text-sm max-w-md">
-        {justificationIa ?? '—'}
+      <td className="px-4 py-4 text-sm max-w-md break-words">
+        <JustificationIA
+          pointsForts={pointsForts}
+          pointsFaibles={pointsFaibles}
+          justification={justificationIa}
+        />
       </td>
       <td className="px-4 py-4">
         <div className="flex flex-col gap-2 min-w-[11rem]">

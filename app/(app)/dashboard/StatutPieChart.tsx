@@ -145,17 +145,22 @@ function PieLayout({
       >
         {svg}
       </svg>
-      <ul className="flex-1 w-full space-y-2">
+      <ul className="flex-1 w-full space-y-2 min-w-0">
         {legend.map((s) => {
+          // Anti-troncature : on autorise le label à passer à la ligne
+          // plutôt que d'être coupé en « Qu… / En att… / R… » sur les
+          // viewports étroits — labels courts (« Qualifiées / En
+          // attente / Rejetées ») tiennent en général sur une ligne mais
+          // c'est le garde-fou pour l'autre cas.
           const inner = (
             <>
-              <span className="flex items-center gap-2 min-w-0">
+              <span className="flex items-center gap-2 min-w-0 flex-1">
                 <span
                   className="inline-block w-3 h-3 rounded-sm shrink-0"
                   style={{ backgroundColor: s.color }}
                   aria-hidden
                 />
-                <span className="truncate">{s.label}</span>
+                <span className="break-words">{s.label}</span>
               </span>
               <span className="text-muted tabular-nums shrink-0">
                 {s.count} ({Math.round(s.pct)}&nbsp;%)

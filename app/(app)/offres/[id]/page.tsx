@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
 import ResendEmailAction from '@/components/ResendEmailAction'
+import JustificationIA from '@/components/JustificationIA'
 import {
   formatValidite,
   effectiveStatut,
@@ -92,7 +93,7 @@ export default async function OffreDetailPage({
   const { data: candidatures } = await supabase
     .from('candidatures')
     .select(
-      'id, nom, email, score_ia, justification_ia, statut, cv_url, created_at, email_sent_at, email_error'
+      'id, nom, email, score_ia, justification_ia, points_forts, points_faibles, statut, cv_url, created_at, email_sent_at, email_error'
     )
     .eq('offre_id', id)
     .order('score_ia', { ascending: false, nullsFirst: false })
@@ -273,7 +274,11 @@ export default async function OffreDetailPage({
         disabled={effectiveOffreStatut === 'clos'}
       />
 
-      {/* Candidatures — filtrables via les KPIs ou les colonnes */}
+      {/* Candidatures — filtrables via les KPIs ou les colonnes.
+          min-w-[960px] sur la table : en dessous de cette largeur le
+          parent `overflow-x-auto` prend le relais et on scrolle
+          horizontalement plutôt que de squeezer la Justification IA sur
+          les autres colonnes (bug observé sur viewport < 1100 px). */}
       <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
         <div className="px-6 py-4 border-b border-border-soft flex items-center justify-between gap-3 flex-wrap">
           <h2 className="font-semibold">
@@ -285,7 +290,7 @@ export default async function OffreDetailPage({
           </h2>
           <FiltersReset fields={CAND_FILTER_FIELDS} />
         </div>
-        <table className="w-full">
+        <table className="w-full min-w-[960px]">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
               <th scope="col" className="px-6 pt-3 pb-2">Candidat / Email</th>
@@ -336,8 +341,12 @@ export default async function OffreDetailPage({
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-4 text-muted text-sm max-w-md">
-                  {c.justification_ia}
+                <td className="px-6 py-4 text-sm max-w-md break-words">
+                  <JustificationIA
+                    pointsForts={c.points_forts}
+                    pointsFaibles={c.points_faibles}
+                    justification={c.justification_ia}
+                  />
                 </td>
                 <td className="px-6 py-4">
                   <StatusBadge status={c.statut ?? 'en attente'} />

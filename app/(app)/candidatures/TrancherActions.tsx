@@ -59,6 +59,16 @@ export default function TrancherActions({
   }
 
   function handleReject() {
+    // Confirmation explicite : voir CandidatureActions.handleReject pour
+    // le rationale. Particulièrement important ici car la liste
+    // /candidatures mélange toutes les offres et les erreurs de ligne
+    // sont plus faciles à faire.
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm('Rejeter cette candidature ?')
+    ) {
+      return
+    }
     setFeedback(null)
     startTransition(async () => {
       const res = await rejectCandidature(candidatureId)

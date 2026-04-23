@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { referentFromEmail, todayIso } from '@/lib/format'
+import { referentFromUser, todayIso } from '@/lib/format'
 import { getAvailableReferents } from '@/lib/referents'
 import EditOffreForm from '../EditOffreForm'
 
@@ -37,7 +37,9 @@ export default async function ModifierOffrePage({
     supabase.auth.getUser(),
     getAvailableReferents(supabase, [offre.am_referent]),
   ])
-  const defaultReferent = referentFromEmail(userRes.data.user?.email)
+  const defaultReferent = userRes.data.user
+    ? referentFromUser(userRes.data.user)
+    : null
   const today = todayIso()
 
   return (

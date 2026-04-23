@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { formatReferent, normalizeClientName } from '@/lib/format'
+import { formatReferent, isValidEmail, normalizeClientName } from '@/lib/format'
 import { FIELD_LIMITS, truncate } from '@/lib/validation'
 
 const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
@@ -17,16 +17,14 @@ export async function updateClient(formData: FormData) {
     String(formData.get('nom') ?? ''),
     FIELD_LIMITS.client_nom
   ).trim()
-  const secteur =
-    truncate(
-      String(formData.get('secteur') ?? ''),
-      FIELD_LIMITS.client_secteur
-    ).trim() || null
-  const contact_email =
-    truncate(
-      String(formData.get('contact_email') ?? ''),
-      FIELD_LIMITS.email
-    ).trim() || null
+  const secteur = truncate(
+    String(formData.get('secteur') ?? ''),
+    FIELD_LIMITS.client_secteur
+  ).trim()
+  const contact_email = truncate(
+    String(formData.get('contact_email') ?? ''),
+    FIELD_LIMITS.email
+  ).trim()
   const formuleRaw = String(formData.get('formule') ?? '').trim()
   const formule = FORMULES.includes(formuleRaw) ? formuleRaw : 'Abonnement'
   const am_referent = formatReferent(
@@ -42,6 +40,29 @@ export async function updateClient(formData: FormData) {
 
   if (!nom) {
     return redirect(`/clients/${id}?error=Le+nom+est+obligatoire`)
+  }
+
+  // Secteur et email de notification sont obligatoires, alignés sur la
+  // création : les `required` HTML bloquent déjà la saisie normale, on
+  // re-check ici pour les POST directs et pour éviter qu'une édition
+  // vide en douce ces champs sur un client existant.
+  if (!secteur) {
+    return redirect(`/clients/${id}?error=Le+secteur+est+obligatoire`)
+  }
+  if (!contact_email) {
+    return redirect(
+      `/clients/${id}?error=L%27email+de+notification+est+obligatoire`
+    )
+  }
+
+  // Filet serveur identique à createClientAction : `type="email"` seul
+  // accepte `user@host` sans point, on durcit avec isValidEmail.
+  if (!isValidEmail(contact_email)) {
+    return redirect(
+      `/clients/${id}?error=${encodeURIComponent(
+        'Format d\'email invalide. Utilise par exemple prenom.nom@domaine.fr.'
+      )}`
+    )
   }
 
   // Détection de doublon côté app : exclut le client courant (on peut

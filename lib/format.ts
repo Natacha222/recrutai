@@ -1,4 +1,20 @@
 /**
+ * Regex email minimaliste utilisée côté serveur pour rejeter les saisies
+ * manifestement fausses (espace, absence de @, pas de TLD). On ne cherche
+ * pas à être RFC-compliant — HTML `type="email"` gère déjà la validation
+ * navigateur, et la partie serveur sert de filet quand quelqu'un POSTe
+ * directement sans passer par le formulaire. Les cas limites (quotes,
+ * unicode…) passent sans drame, c'est intentionnel.
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** true si `value` ressemble à un email. Chaîne vide = false. */
+export function isValidEmail(value: string | null | undefined): boolean {
+  if (!value) return false
+  return EMAIL_RE.test(value.trim())
+}
+
+/**
  * Formate une date Postgres (ISO YYYY-MM-DD) en français (JJ/MM/AAAA).
  * Retourne '—' si la valeur est nulle ou malformée.
  *
@@ -50,6 +66,45 @@ export function effectiveStatut(
   if (rawStatut === 'clos') return 'clos'
   if (isExpired(dateValidite)) return 'clos'
   return 'actif'
+}
+
+/**
+ * Normalise un paramètre URL de statut d'offre vers la forme canonique
+ * utilisée en base (`actif` / `clos`). Accepte plusieurs alias pour que
+ * les URLs bookmarkées ou tapées à la main restent fonctionnelles, même
+ * si le dropdown utilise les labels français :
+ *
+ *   normalizeStatutOffreParam('actif')     -> 'actif'
+ *   normalizeStatutOffreParam('Active')    -> 'actif'
+ *   normalizeStatutOffreParam('clos')      -> 'clos'
+ *   normalizeStatutOffreParam('Clôturée')  -> 'clos'
+ *   normalizeStatutOffreParam('cloturee')  -> 'clos'
+ *   normalizeStatutOffreParam('')          -> ''    (pas de filtre)
+ *   normalizeStatutOffreParam('foo')       -> ''    (alias inconnu ignoré)
+ *
+ * Renvoie '' (chaîne vide) pour « pas de filtre » ou alias non reconnu —
+ * l'appelant peut alors afficher « Tous » sans casser la query.
+ */
+export function normalizeStatutOffreParam(
+  raw: string | null | undefined
+): '' | 'actif' | 'clos' {
+  if (!raw) return ''
+  const s = raw
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (s === 'actif' || s === 'active') return 'actif'
+  if (
+    s === 'clos' ||
+    s === 'close' ||
+    s === 'closed' ||
+    s === 'cloturee' ||
+    s === 'cloture'
+  ) {
+    return 'clos'
+  }
+  return ''
 }
 
 /**
@@ -167,4 +222,35 @@ export function referentFromEmail(
   if (!local) return null
   const withSpaces = local.replace(/[._-]+/g, ' ')
   return formatReferent(withSpaces)
+}
+
+/**
+ * Déduit le référent par défaut d'un utilisateur connecté.
+ *
+ * Priorité stricte :
+ *   1. `user_metadata.prenom` + `user_metadata.nom` (renseignés à la
+ *      création du compte via le dashboard Supabase) → format « F. NOM »
+ *      garanti. C'est le chemin « nominal ».
+ *   2. À défaut, dérivation depuis l'email (séparateurs `. _ -` comme
+ *      indices de frontière prénom/nom). Fragile pour les emails
+ *      atypiques — ex : `goumiriaziz.pro@gmail.com` renverrait « G. PRO »
+ *      qui est faux. D'où l'importance de toujours essayer user_metadata
+ *      en premier.
+ *   3. Si rien ne marche : `null` (le select affichera « — Sans référent — »).
+ *
+ * Centralisé ici pour que les pages création client / nouvelle offre
+ * utilisent STRICTEMENT la même logique — sinon deux utilisateurs avec
+ * metadata identique pourraient voir un default différent selon la page.
+ */
+export function referentFromUser(user: {
+  email?: string | null
+  user_metadata?: Record<string, unknown> | null
+}): string | null {
+  const meta = user.user_metadata ?? null
+  const prenom = typeof meta?.prenom === 'string' ? meta.prenom.trim() : ''
+  const nom = typeof meta?.nom === 'string' ? meta.nom.trim() : ''
+  if (prenom && nom) {
+    return formatReferent(`${prenom} ${nom}`)
+  }
+  return referentFromEmail(user.email)
 }

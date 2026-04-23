@@ -233,8 +233,12 @@ export default function OffreForm({
               : 'cursor-pointer hover:bg-brand-purple hover:text-white'
           }`}
         >
-          <span aria-hidden="true">📎</span>
-          <span>
+          {/* pointer-events-none sur les spans : sinon un clic pile sur
+              l'emoji ou sur le texte n'est pas délégué au <input> caché
+              et la boîte fichier ne s'ouvre pas (bug a11y observé via
+              Playwright). */}
+          <span aria-hidden="true" className="pointer-events-none">📎</span>
+          <span className="pointer-events-none">
             {importStatus === 'importing'
               ? 'Analyse IA…'
               : 'Importer un PDF'}
@@ -488,13 +492,22 @@ export default function OffreForm({
               value={seuil}
               onChange={(e) => setSeuil(Number(e.target.value))}
               aria-invalid={!seuilIsValid}
-              aria-describedby={!seuilIsValid ? 'seuil_error' : undefined}
+              aria-describedby={
+                !seuilIsValid
+                  ? 'seuil_help seuil_error'
+                  : 'seuil_help'
+              }
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
                 !seuilIsValid
                   ? 'border-status-red focus:ring-status-red'
                   : 'border-border-soft focus:ring-brand-purple'
               }`}
             />
+            <p id="seuil_help" className="text-xs text-muted mt-1">
+              Entier entre 50 et 100. Conseils : ~50 pour un métier en
+              tension (on élargit le vivier), ~80 pour un recrutement plus
+              classique (on resserre sur les profils proches de la cible).
+            </p>
             {!seuilIsValid && (
               <p id="seuil_error" className="text-xs text-status-red mt-1">
                 Le seuil doit être un entier compris entre 50 et 100.
@@ -532,7 +545,7 @@ export default function OffreForm({
               id="date_validite_help"
               className="text-xs text-muted mt-1"
             >
-              Par défaut, 3 mois. Modifie si nécessaire — passé cette
+              Par défaut, 3 mois. Modifier si nécessaire — passé cette
               date, l&apos;offre se clôture automatiquement.
             </p>
             {dateInPast && (
@@ -687,10 +700,11 @@ function CreateClientModal({
 
         <div>
           <label className="block text-sm font-medium text-brand-indigo-text mb-1">
-            Secteur
+            Secteur <span className="text-status-red">*</span>
           </label>
           <input
             type="text"
+            required
             value={secteur}
             onChange={(e) => setSecteur(e.target.value)}
             maxLength={FIELD_LIMITS.client_secteur}
@@ -700,13 +714,18 @@ function CreateClientModal({
 
         <div>
           <label className="block text-sm font-medium text-brand-indigo-text mb-1">
-            Email de contact
+            Email de notification <span className="text-status-red">*</span>
           </label>
           <input
             type="email"
+            required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             maxLength={FIELD_LIMITS.email}
+            // `type="email"` accepte `user@host` (sans TLD) — on durcit
+            // avec un pattern aligné sur isValidEmail côté serveur.
+            pattern="[^\s@]+@[^\s@]+\.[^\s@]+"
+            title="Format attendu : prenom.nom@domaine.fr (le domaine doit contenir un point)."
             className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
           />
         </div>

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { updateClient } from './actions'
 import StatusBadge from '@/components/StatusBadge'
 import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
-import { effectiveStatut, formatValidite, referentFromEmail } from '@/lib/format'
+import { effectiveStatut, formatValidite, referentFromUser } from '@/lib/format'
 import { getAvailableReferents } from '@/lib/referents'
 import { FIELD_LIMITS } from '@/lib/validation'
 
@@ -53,7 +53,11 @@ export default async function ClientDetailPage({
   // Liste des référents : union clients + offres + user connecté + valeur
   // actuelle du client (pour qu'elle apparaisse dans le select même si
   // elle n'est plus référente d'aucune autre entité).
-  const currentUserReferent = referentFromEmail(userRes.data.user?.email)
+  // Priorité à user_metadata.prenom/nom (fiable), fallback sur l'email.
+  // Voir referentFromUser pour le rationale (cas Aziz — email atypique).
+  const currentUserReferent = userRes.data.user
+    ? referentFromUser(userRes.data.user)
+    : null
   const availableReferents = await getAvailableReferents(supabase, [
     currentUserReferent,
     client.am_referent,
@@ -101,6 +105,7 @@ export default async function ClientDetailPage({
           label="Secteur"
           name="secteur"
           defaultValue={client.secteur ?? ''}
+          required
           maxLength={FIELD_LIMITS.client_secteur}
         />
         <Field
@@ -108,6 +113,7 @@ export default async function ClientDetailPage({
           name="contact_email"
           type="email"
           defaultValue={client.contact_email ?? ''}
+          required
           maxLength={FIELD_LIMITS.email}
         />
 
@@ -254,6 +260,15 @@ function Field({
         defaultValue={defaultValue}
         placeholder={placeholder}
         maxLength={maxLength}
+        // `type="email"` seul accepte `user@host` (sans TLD) — HTML5
+        // n'exige pas de point. On durcit avec un pattern aligné sur
+        // isValidEmail côté serveur : local@domaine.tld minimum.
+        pattern={type === 'email' ? '[^\\s@]+@[^\\s@]+\\.[^\\s@]+' : undefined}
+        title={
+          type === 'email'
+            ? 'Format attendu : prenom.nom@domaine.fr (le domaine doit contenir un point).'
+            : undefined
+        }
         className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
       />
     </div>

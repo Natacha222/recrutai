@@ -1,7 +1,11 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
-import { effectiveStatut, formatValidite } from '@/lib/format'
+import {
+  effectiveStatut,
+  formatValidite,
+  normalizeStatutOffreParam,
+} from '@/lib/format'
 import {
   DateFilter,
   FiltersReset,
@@ -125,9 +129,13 @@ export default async function OffresPage({
     client = '',
     referent = '',
     contrat = '',
-    statut = '',
     validite = '',
   } = params
+  // Normalise le paramètre `statut` vers la forme canonique DB (actif/clos).
+  // Sans ça, une URL tapée à la main comme `?statut=Active` ou `?statut=Clôturée`
+  // ne matchait rien (valeurs internes = actif/clos) et la page renvoyait 0
+  // résultat alors que l'utilisateur voyait le label « Active » dans le select.
+  const statut = normalizeStatutOffreParam(params.statut)
   const sort: SortKey = SORT_KEYS.includes(params.sort as SortKey)
     ? (params.sort as SortKey)
     : 'titre'

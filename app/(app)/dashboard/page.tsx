@@ -151,30 +151,12 @@ export default async function DashboardPage({
     },
   ]
 
-  // ---- Qualité IA : inchangée sauf qu'on réutilise le fetch candidatures
-  // Feature parity avec l'ancien dashboard : on calcule score moyen,
-  // flottement et incomplets à partir des candidatures scorées.
-  type QualiteIaRow = {
-    nom: string | null
-    email: string | null
-    score_ia: number | null
-    statut: string | null
-    offres_seuil: number | null
-  }
-
-  const qualiteIaRows: QualiteIaRow[] = candidatures.map((c) => {
-    const offre = Array.isArray(c.offres) ? c.offres[0] : c.offres
-    return {
-      nom: c.nom,
-      email: c.email,
-      score_ia: c.score_ia,
-      statut: c.statut,
-      offres_seuil: offre?.seuil ?? null,
-    }
-  })
-
-  const scored = qualiteIaRows.filter(
-    (c): c is QualiteIaRow & { score_ia: number } => c.score_ia !== null
+  // ---- Qualité IA : score moyen + répartition pie chart.
+  // Depuis le refactor « CV en attente » (qui remplace l'ancienne carte
+  // Taux de flottement), on n'a plus besoin du seuil côté KPI — seuls
+  // score_ia et statut restent.
+  const scored = candidatures.filter(
+    (c): c is CandidatureRow & { score_ia: number } => c.score_ia !== null
   )
   const totalScored = scored.length
 
@@ -185,31 +167,18 @@ export default async function DashboardPage({
         )
       : 0
 
-  // Taux de flottement — cohérent avec /candidatures/flottement :
-  // score ±5 du seuil ET statut encore en attente (qualifié/rejeté exclus).
-  const flottementCount = scored.filter((c) => {
-    if (c.statut === 'qualifié' || c.statut === 'rejeté') return false
-    const seuil = c.offres_seuil ?? 60
-    return Math.abs(c.score_ia - seuil) <= 5
-  }).length
-  const tauxFlottement =
-    totalScored > 0 ? Math.round((flottementCount / totalScored) * 100) : 0
-
-  const incompletsCount = scored.filter((c) => {
-    const hasNom = !!c.nom?.trim()
-    const hasEmail =
-      !!c.email?.trim() && !c.email.endsWith('@example.com')
-    return !hasNom || !hasEmail
-  }).length
-  const tauxIncomplets =
-    totalScored > 0 ? Math.round((incompletsCount / totalScored) * 100) : 0
-
   // ---- Répartition par statut (pie chart)
   const statutCounts = scored.reduce((acc, c) => {
     const s = c.statut ?? 'en attente'
     acc[s] = (acc[s] ?? 0) + 1
     return acc
   }, {} as Record<string, number>)
+
+  // Source unique de vérité pour le bouton « CV en attente » ET la part
+  // orange du camembert : les deux doivent afficher STRICTEMENT le même
+  // chiffre (cf. demande utilisateur), sinon le clic sur la part puis sur
+  // le bouton donne deux listes différentes = incohérence visible.
+  const cvEnAttenteCount = statutCounts['en attente'] ?? 0
 
   // URL vers la liste filtrée par statut. encodeURIComponent gère les
   // accents de 'qualifié' / 'rejeté' et l'espace de 'en attente'.
@@ -360,11 +329,11 @@ export default async function DashboardPage({
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Dashboard</h1>
 
-      {/* 6 KPIs compactés sur une seule ligne (2 cols mobile → 3 tablette →
-          6 desktop). Les 3 derniers (Qualité IA) ont une bordure gauche
+      {/* 5 KPIs compactés sur une seule ligne (2 cols mobile → 3 tablette →
+          5 desktop). Les 2 derniers (Qualité IA) ont une bordure gauche
           colorée pour les différencier visuellement sans perdre la ligne
           de heading dédiée. */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {kpis.map((k) => (
           <div
             key={k.label}
@@ -394,42 +363,49 @@ export default async function DashboardPage({
             </span>
           </div>
         </div>
+        {/* CV en attente — même chiffre que la part orange du camembert,
+            les deux sources partagent `cvEnAttenteCount`. Clic = filtre
+            sur /candidatures?statut=en attente (encoding fait par hrefFor).
+            Quand il y a des CV à trancher on vire la carte neutre pour un
+            vrai bouton rempli (brand-purple, texte blanc), pour que l'oeil
+            voie immédiatement qu'il y a quelque chose à cliquer. À zéro on
+            reste sur le look de carte KPI : rien à faire, pas d'urgence. */}
         <Link
-          href="/candidatures/flottement"
-          className="bg-surface-alt rounded-lg px-3 py-2.5 shadow-sm border border-border-soft border-l-4 border-l-brand-purple block hover:border-brand-purple hover:shadow-md transition-all"
-          title="Indicateur de qualité IA"
+          href={hrefFor('en attente')}
+          className={`rounded-lg px-3 py-2.5 shadow-sm border block transition-all ${
+            cvEnAttenteCount > 0
+              ? 'bg-brand-purple text-white border-brand-purple hover:opacity-90 hover:shadow-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-purple focus:ring-offset-2'
+              : 'bg-surface-alt border-border-soft border-l-4 border-l-brand-purple'
+          }`}
+          title={
+            cvEnAttenteCount > 0
+              ? `Voir les ${cvEnAttenteCount} CV en attente`
+              : 'Tout est à jour'
+          }
+          aria-label={
+            cvEnAttenteCount > 0
+              ? `Voir les ${cvEnAttenteCount} CV en attente`
+              : 'CV en attente : tout est à jour'
+          }
         >
-          <div className="text-[11px] text-muted font-medium leading-tight">
-            Taux de flottement
+          <div
+            className={`text-[11px] font-medium leading-tight ${
+              cvEnAttenteCount > 0 ? 'text-white/90' : 'text-muted'
+            }`}
+          >
+            CV en attente
           </div>
           <div className="flex items-baseline gap-1.5 leading-tight mt-0.5 flex-wrap">
-            <span className="text-2xl font-bold text-brand-indigo-text">
-              {totalScored > 0 ? `${tauxFlottement}\u00A0%` : '—'}
+            <span
+              className={`text-2xl font-bold ${
+                cvEnAttenteCount > 0 ? 'text-white' : 'text-brand-indigo-text'
+              }`}
+            >
+              {cvEnAttenteCount}
             </span>
-            <span className="text-[11px] text-muted">
-              {flottementCount > 0
-                ? `${flottementCount} à trancher →`
-                : '±5 pts du seuil'}
-            </span>
-          </div>
-        </Link>
-        <Link
-          href="/candidatures/incompletes"
-          className="bg-surface-alt rounded-lg px-3 py-2.5 shadow-sm border border-border-soft border-l-4 border-l-brand-purple block hover:border-brand-purple hover:shadow-md transition-all"
-          title="Indicateur de qualité IA"
-        >
-          <div className="text-[11px] text-muted font-medium leading-tight">
-            Taux d&apos;incomplets
-          </div>
-          <div className="flex items-baseline gap-1.5 leading-tight mt-0.5 flex-wrap">
-            <span className="text-2xl font-bold text-brand-indigo-text">
-              {totalScored > 0 ? `${tauxIncomplets}\u00A0%` : '—'}
-            </span>
-            <span className="text-[11px] text-muted">
-              {incompletsCount > 0
-                ? `${incompletsCount} à compléter →`
-                : 'nom ou email manquant'}
-            </span>
+            {cvEnAttenteCount === 0 && (
+              <span className="text-[11px] text-muted">tout est à jour</span>
+            )}
           </div>
         </Link>
       </div>
@@ -454,7 +430,6 @@ export default async function DashboardPage({
             currentTo={params.evol_to}
             todayIso={todayForInput}
             currentForecast={period.forecast}
-            granularity={period.granularity}
           />
           <EvolutionChart points={timeseries} periodLabel={period.label} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border-soft">

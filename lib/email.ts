@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import type { createClient } from '@/lib/supabase/server'
+import { isValidEmail } from '@/lib/format'
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
@@ -66,6 +67,8 @@ export async function sendQualifiedCandidateEmail({
   score,
   seuil,
   justification,
+  pointsForts,
+  pointsFaibles,
   cvBuffer,
   cvFilename,
 }: {
@@ -75,16 +78,36 @@ export async function sendQualifiedCandidateEmail({
   offreReference: string | null
   offreTitle: string
   candidateName: string
-  candidateEmail: string
+  /** Email candidat. Nullable depuis que la colonne est optionnelle —
+   *  si vide, la ligne « Email » est simplement masquée dans le mail. */
+  candidateEmail: string | null
   score: number
   seuil: number
   justification: string
+  /** Top forces IA (colonne `points_forts`). `null` = scoring pré-refactor
+   *  ou en erreur → on tombe sur la justification brute. `[]` = IA OK mais
+   *  rien de saillant → section simplement omise. */
+  pointsForts: string[] | null
+  pointsFaibles: string[] | null
   cvBuffer: Buffer
   cvFilename: string
 }): Promise<EmailSendResult> {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     return { ok: false, error: 'RESEND_API_KEY manquant' }
+  }
+
+  // Filet central : on refuse l'envoi si l'adresse destinataire n'a pas la
+  // forme minimale attendue (local@domaine.tld). Ça protège contre des
+  // données legacy stockées AVANT qu'on ait mis en place la validation
+  // côté formulaire, et contre les adresses saisies via un POST direct qui
+  // aurait contourné la validation — sans ça, Resend peut accepter ou
+  // rebond discret, et on ne saurait jamais.
+  if (!isValidEmail(to)) {
+    return {
+      ok: false,
+      error: `Adresse de notification invalide (${to}) — vérifie le contact_email du client (attendu : prenom.nom@domaine.fr).`,
+    }
   }
 
   const resend = new Resend(apiKey)
@@ -100,6 +123,53 @@ export async function sendQualifiedCandidateEmail({
     !candidateEmail.endsWith('@example.com')
 
   const justificationHtml = escapeHtml(justification).replace(/\n/g, '<br />')
+
+  // Prépare les listes forts/faibles pour l'email. On en affiche jusqu'à 3
+  // max côté mail (cohérent avec l'UI compacte côté listings) — au-delà,
+  // l'info est dans le PDF / la justification complète. On caste `null`
+  // (pas de données structurées) en `[]` pour ne rien afficher sans casser
+  // le rendu.
+  const fortsForEmail = (pointsForts ?? []).slice(0, 3)
+  const faiblesForEmail = (pointsFaibles ?? []).slice(0, 3)
+
+  const renderBullets = (items: string[], dotColor: string) =>
+    items
+      .map(
+        (it) =>
+          `<li style="margin-bottom: 4px;"><span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: ${dotColor}; margin-right: 8px; vertical-align: middle;"></span>${escapeHtml(
+            it
+          )}</li>`
+      )
+      .join('')
+
+  const highlightsHtml =
+    fortsForEmail.length > 0 || faiblesForEmail.length > 0
+      ? `
+      <div style="margin-bottom: 24px;">
+        ${
+          fortsForEmail.length > 0
+            ? `<div style="margin-bottom: 16px;">
+                <div style="font-weight: 600; color: #10B981; margin-bottom: 8px; text-transform: uppercase; font-size: 12px; letter-spacing: 0.04em;">Points forts</div>
+                <ul style="list-style: none; padding: 0; margin: 0; color: #1F2937; font-size: 14px; line-height: 1.5;">${renderBullets(
+                  fortsForEmail,
+                  '#10B981'
+                )}</ul>
+              </div>`
+            : ''
+        }
+        ${
+          faiblesForEmail.length > 0
+            ? `<div>
+                <div style="font-weight: 600; color: #EF4444; margin-bottom: 8px; text-transform: uppercase; font-size: 12px; letter-spacing: 0.04em;">Points de vigilance</div>
+                <ul style="list-style: none; padding: 0; margin: 0; color: #1F2937; font-size: 14px; line-height: 1.5;">${renderBullets(
+                  faiblesForEmail,
+                  '#EF4444'
+                )}</ul>
+              </div>`
+            : ''
+        }
+      </div>`
+      : ''
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; color: #1F2937;">
@@ -132,6 +202,7 @@ export async function sendQualifiedCandidateEmail({
           </td>
         </tr>
       </table>
+      ${highlightsHtml}
       <div style="background: #F5F3FF; border-left: 4px solid #7C3AED; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
         <div style="font-weight: 600; color: #7C3AED; margin-bottom: 8px;">Analyse IA</div>
         <div style="color: #1F2937; line-height: 1.5;">${justificationHtml}</div>

@@ -36,6 +36,17 @@ export default function CandidatureActions({
   }
 
   function handleReject() {
+    // Confirmation explicite : le rejet ne ferme rien de définitif côté DB
+    // (la candidature reste, juste marquée `rejeté` — réversible via la
+    // page /candidatures) mais c'est loud au quotidien : un AM qui se
+    // trompe de ligne ne devrait pas pouvoir annuler d'un clic sans s'en
+    // rendre compte. confirm() natif suffit pour la v1.
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm('Rejeter cette candidature ?')
+    ) {
+      return
+    }
     setStatus('idle')
     setMessage('')
     startTransition(async () => {

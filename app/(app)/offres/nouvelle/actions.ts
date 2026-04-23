@@ -7,7 +7,12 @@ import {
   extractOffreFromPdfBuffer,
   type ExtractedOffre,
 } from '@/lib/offre-extraction'
-import { formatReferent, normalizeClientName, todayIso } from '@/lib/format'
+import {
+  formatReferent,
+  isValidEmail,
+  normalizeClientName,
+  todayIso,
+} from '@/lib/format'
 import { FIELD_LIMITS, truncate } from '@/lib/validation'
 
 const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
@@ -93,6 +98,29 @@ export async function createOffre(formData: FormData) {
   if (date_validite < todayIso()) {
     return redirect(
       '/offres/nouvelle?error=La+date+de+validit%C3%A9+doit+%C3%AAtre+post%C3%A9rieure+ou+%C3%A9gale+%C3%A0+aujourd%27hui'
+    )
+  }
+
+  // Pré-check d'unicité de la référence (case-insensitive, trimmée). On ne
+  // peut pas poser un index unique en DB : il y a déjà des doublons
+  // historiques (ex. DEV-2026-042 sur plusieurs offres actives). On bloque
+  // donc côté app pour éviter d'en créer de nouveaux tout en laissant les
+  // existants en place — le ménage se fera manuellement via la page
+  // « Modifier ». Une race-condition reste théoriquement possible (deux
+  // créations simultanées avec la même référence) mais le volume
+  // d'utilisateurs est très faible : acceptable.
+  const refLower = reference.toLowerCase()
+  const { data: existingRefs } = await supabase
+    .from('offres')
+    .select('id, reference')
+  const duplicate = (existingRefs ?? []).find(
+    (o) => (o.reference ?? '').toLowerCase().trim() === refLower
+  )
+  if (duplicate) {
+    return redirect(
+      `/offres/nouvelle?error=${encodeURIComponent(
+        `La référence « ${reference} » est déjà utilisée par une autre offre. Choisis-en une différente.`
+      )}`
     )
   }
 
@@ -259,10 +287,32 @@ export async function createClientInlineAction(input: {
     }
   }
 
-  const secteur =
-    truncate(input.secteur ?? '', FIELD_LIMITS.client_secteur).trim() || null
-  const contact_email =
-    truncate(input.contact_email ?? '', FIELD_LIMITS.email).trim() || null
+  const secteur = truncate(
+    input.secteur ?? '',
+    FIELD_LIMITS.client_secteur
+  ).trim()
+  const contact_email = truncate(
+    input.contact_email ?? '',
+    FIELD_LIMITS.email
+  ).trim()
+  // Secteur + email de notification obligatoires (aligné sur
+  // createClientAction). Les `required` HTML bloquent la modale, mais
+  // on garde le filet serveur pour les POST directs.
+  if (!secteur) {
+    return { ok: false, error: 'Le secteur est obligatoire.' }
+  }
+  if (!contact_email) {
+    return { ok: false, error: 'L\'email de notification est obligatoire.' }
+  }
+  // Filet serveur : `type="email"` seul accepte `user@host` sans point,
+  // on durcit avec isValidEmail pour garantir un domaine avec TLD.
+  if (!isValidEmail(contact_email)) {
+    return {
+      ok: false,
+      error:
+        'Format d\'email invalide. Utilise par exemple prenom.nom@domaine.fr.',
+    }
+  }
   const formule = FORMULES.includes(input.formule) ? input.formule : 'Abonnement'
   const am_referent = formatReferent(
     truncate(input.am_referent ?? '', FIELD_LIMITS.am_referent)

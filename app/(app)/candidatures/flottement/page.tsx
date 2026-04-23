@@ -20,6 +20,8 @@ type CandidatureRow = {
   score_ia: number | null
   statut: string | null
   justification_ia: string | null
+  points_forts: string[] | null
+  points_faibles: string[] | null
   cv_url: string | null
   created_at: string | null
   offres:
@@ -55,13 +57,13 @@ export default async function FlottementPage({
   const { ref = '' } = await searchParams
   const supabase = await createClient()
 
-  // Comme sur /candidatures/incompletes, on fetch toutes les candidatures
-  // scorées et on applique le même filtre côté JS que le KPI du dashboard
-  // pour garder une cohérence parfaite entre le chiffre (5 %) et la liste.
+  // On fetch toutes les candidatures scorées et on applique côté JS le même
+  // filtre que le KPI du dashboard pour garder une cohérence parfaite entre
+  // le chiffre (5 %) et la liste.
   const { data: rows } = await supabase
     .from('candidatures')
     .select(
-      'id, nom, email, score_ia, statut, justification_ia, cv_url, created_at, offres(id, titre, reference, seuil, am_referent)'
+      'id, nom, email, score_ia, statut, justification_ia, points_forts, points_faibles, cv_url, created_at, offres(id, titre, reference, seuil, am_referent)'
     )
     .not('score_ia', 'is', null)
     .order('created_at', { ascending: false })
@@ -133,19 +135,26 @@ export default async function FlottementPage({
     <div className="space-y-6">
       <div>
         <Link
-          href="/dashboard"
+          href="/candidatures"
           className="text-sm text-muted hover:underline"
         >
-          ← Retour au dashboard
+          ← Toutes les candidatures
         </Link>
         <h1 className="text-2xl font-bold mt-2">
           Candidatures en flottement
         </h1>
         <p className="text-sm text-muted mt-1">
-          Candidats dont le score IA est à ±{FLOTTEMENT_WIDTH}&nbsp;pts du
-          seuil de qualification de leur offre. Cas limites : un coup
-          d&apos;œil au CV + à la justification, puis tu qualifies
-          (email client envoyé) ou tu rejettes.
+          Sous-ensemble des candidatures «&nbsp;en attente&nbsp;» dont le
+          score IA est à ±{FLOTTEMENT_WIDTH}&nbsp;pts du seuil de
+          qualification de leur offre — les cas vraiment limites. Un
+          coup d&apos;œil au CV + à la justification, puis tu qualifies
+          (email client envoyé) ou tu rejettes.{' '}
+          <Link
+            href="/candidatures?statut=en+attente"
+            className="text-brand-purple hover:underline"
+          >
+            Voir toutes les candidatures en attente →
+          </Link>
         </p>
       </div>
 
@@ -169,7 +178,11 @@ export default async function FlottementPage({
             </h2>
             <FiltersReset fields={FILTER_FIELDS} />
           </div>
-          <table className="w-full">
+          {/* min-w-[1100px] : 7 colonnes dont une Justification IA large ;
+              sous cette largeur on scrolle horizontalement grâce au
+              overflow-x-auto parent, plutôt que de squeezer les colonnes
+              Score / Action qui deviennent illisibles. */}
+          <table className="w-full min-w-[1100px]">
             <thead className="bg-surface">
               <tr className="text-left text-xs font-semibold text-muted uppercase">
                 <th scope="col" className="px-4 pt-3 pb-2">CV</th>
@@ -209,6 +222,8 @@ export default async function FlottementPage({
                     seuil={offre.seuil}
                     statut={c.statut ?? 'en attente'}
                     justificationIa={c.justification_ia}
+                    pointsForts={c.points_forts}
+                    pointsFaibles={c.points_faibles}
                     cvUrl={c.cv_url}
                     offreId={offre.id}
                     offreTitre={offre.titre}

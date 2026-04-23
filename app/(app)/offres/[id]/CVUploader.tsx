@@ -251,7 +251,11 @@ export default function CVUploader({
         </div>
 
         {/* A11y : htmlFor + sr-only pour garder l'input focusable au
-            clavier. focus-within: rend le focus visible sur le label. */}
+            clavier. focus-within: rend le focus visible sur le label.
+            pointer-events-none sur l'emoji : sinon le span intercepte le
+            clic, ce qui casse l'ouverture de la boîte de dialogue fichier
+            (observé via Playwright — le clic exact sur 📎 ne propage pas
+            au <input>). */}
         <label
           htmlFor="cv-upload-input"
           className={`inline-flex items-center gap-2 px-4 py-2 bg-brand-purple text-white rounded-md text-sm font-semibold whitespace-nowrap focus-within:ring-2 focus-within:ring-brand-purple focus-within:ring-offset-2 ${
@@ -260,8 +264,8 @@ export default function CVUploader({
               : 'cursor-pointer hover:opacity-90'
           }`}
         >
-          <span aria-hidden="true">📎</span>
-          <span>Joindre des CVs</span>
+          <span aria-hidden="true" className="pointer-events-none">📎</span>
+          <span className="pointer-events-none">Joindre des CVs</span>
           <input
             id="cv-upload-input"
             ref={inputRef}

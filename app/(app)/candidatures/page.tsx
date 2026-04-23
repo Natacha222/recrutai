@@ -1,10 +1,16 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { FiltersReset, SelectFilter } from '@/components/TableFilters'
+import {
+  DateFilter,
+  FiltersReset,
+  SelectFilter,
+  SortHeader,
+  TextFilter,
+} from '@/components/TableFilters'
 import StatusBadge from '@/components/StatusBadge'
 import ResendEmailAction from '@/components/ResendEmailAction'
+import JustificationIA from '@/components/JustificationIA'
 import { scoreColor } from '@/lib/format'
-import TrancherActions from './TrancherActions'
 
 /**
  * Liste globale des candidatures, filtrable par statut, référent et offre.
@@ -12,13 +18,10 @@ import TrancherActions from './TrancherActions'
  * page avec ?statut=xxx pré-rempli).
  *
  * Pour chaque « en attente », on affiche la raison (scoring IA échoué,
- * infos candidat à compléter, sous le seuil, à trancher) + la
- * justification IA complète, pour que le recruteur puisse décider sans
- * ouvrir l'offre. Trois boutons inline via <TrancherActions> :
- *   - Qualifier / Rejeter (toujours)
- *   - Relancer le scoring (si le scoring IA a planté la 1re fois)
- * La qualification déclenche l'email client si l'offre est active
- * — exactement comme le workflow de la page offre.
+ * sous le seuil, à trancher) + les points forts/faibles (dépliables via
+ * JustificationIA) pour que le recruteur sache d'un coup d'œil où il en
+ * est. Pas de boutons d'action ici : le tranche se fait sur la fiche
+ * offre (cohérent avec le workflow qui déclenche aussi l'email client).
  */
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +31,44 @@ export const dynamic = 'force-dynamic'
 // actionnable) remonte en premier.
 const STATUTS = ['en attente', 'qualifié', 'rejeté'] as const
 
-const FILTER_FIELDS = ['statut', 'ref', 'offre_id']
+// Tous les paramètres URL (filtres + tri) que le bouton « Réinitialiser »
+// doit purger pour remettre la table à son état par défaut.
+const FILTER_FIELDS = [
+  'statut',
+  'ref',
+  'offre_id',
+  'candidat',
+  'date',
+  'ref_offre',
+  'sort',
+  'dir',
+]
+
+type SortField =
+  | 'candidat'
+  | 'date'
+  | 'ref_offre'
+  | 'ref'
+  | 'offre'
+  | 'statut'
+
+const SORT_FIELDS: Record<SortField, true> = {
+  candidat: true,
+  date: true,
+  ref_offre: true,
+  ref: true,
+  offre: true,
+  statut: true,
+}
+
+function normalizeSort(raw: string | undefined): SortField | '' {
+  if (!raw) return ''
+  return raw in SORT_FIELDS ? (raw as SortField) : ''
+}
+
+function normalizeDir(raw: string | undefined): 'asc' | 'desc' {
+  return raw === 'desc' ? 'desc' : 'asc'
+}
 
 type CandidatureRow = {
   id: string
@@ -39,6 +79,11 @@ type CandidatureRow = {
   created_at: string | null
   cv_url: string | null
   justification_ia: string | null
+  /** Décomposition structurée de la justification (3-5 items max par
+   *  liste). NULL sur les candidatures scorées avant ce refactor — l'UI
+   *  retombe alors sur `justification_ia` brut. */
+  points_forts: string[] | null
+  points_faibles: string[] | null
   /** Dernier envoi d'email réussi. NULL si jamais envoyé ou si le dernier
    *  essai a échoué — dans ce cas `email_error` contient le message. */
   email_sent_at: string | null
@@ -70,6 +115,17 @@ type SearchParams = Promise<{
   ref?: string
   /** Filtre offre (offres.id en UUID). */
   offre_id?: string
+  /** Filtre libre sur le nom du candidat (contient, insensible à la casse). */
+  candidat?: string
+  /** Filtre date exacte de réception (created_at, YYYY-MM-DD). */
+  date?: string
+  /** Filtre libre sur la référence de l'offre (contient, insensible à la casse). */
+  ref_offre?: string
+  /** Tri : nom du champ trié (`candidat`, `date`, `ref_offre`, `ref`,
+   *  `offre`, `statut`). Vide = tri serveur par défaut (created_at desc). */
+  sort?: string
+  /** Direction du tri : `asc` | `desc`. Ignoré sans `sort`. */
+  dir?: string
 }>
 
 export default async function CandidaturesPage({
@@ -77,13 +133,21 @@ export default async function CandidaturesPage({
 }: {
   searchParams: SearchParams
 }) {
-  const { statut = '', ref = '', offre_id = '' } = await searchParams
+  const sp = await searchParams
+  const statut = sp.statut ?? ''
+  const ref = sp.ref ?? ''
+  const offre_id = sp.offre_id ?? ''
+  const candidatQ = (sp.candidat ?? '').trim()
+  const dateFilter = sp.date ?? ''
+  const refOffreQ = (sp.ref_offre ?? '').trim()
+  const sortField = normalizeSort(sp.sort)
+  const sortDir = normalizeDir(sp.dir)
   const supabase = await createClient()
 
   const { data: rows } = await supabase
     .from('candidatures')
     .select(
-      'id, nom, email, score_ia, statut, created_at, cv_url, justification_ia, email_sent_at, email_error, offres(id, titre, reference, seuil, am_referent)'
+      'id, nom, email, score_ia, statut, created_at, cv_url, justification_ia, points_forts, points_faibles, email_sent_at, email_error, offres(id, titre, reference, seuil, am_referent)'
     )
     .order('created_at', { ascending: false })
 
@@ -125,17 +189,80 @@ export default async function CandidaturesPage({
     .map(([id, titre]) => ({ id, titre }))
     .sort((a, b) => a.titre.localeCompare(b.titre, 'fr'))
 
+  // Normalisation (minuscules, sans accents) pour les filtres « contient »
+  // sur candidat et référence d'offre — cohérent avec normalizeClientName.
+  const stripAccents = (s: string) =>
+    s
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+  const candidatQN = stripAccents(candidatQ)
+  const refOffreQN = stripAccents(refOffreQ)
+
   // Filtrage combiné — chaque filtre est ANDé.
   const filtered = all.filter((c) => {
     if (statut && c.statut !== statut) return false
     if (ref && c._offre?.am_referent !== ref) return false
     if (offre_id && c._offre?.id !== offre_id) return false
+    if (candidatQN) {
+      const nomN = stripAccents(c.nom ?? '')
+      if (!nomN.includes(candidatQN)) return false
+    }
+    if (dateFilter) {
+      // created_at est un timestamp ISO — on compare sur les 10 premiers
+      // caractères (YYYY-MM-DD) à la date du filtre pour un match exact.
+      const candDate = (c.created_at ?? '').slice(0, 10)
+      if (candDate !== dateFilter) return false
+    }
+    if (refOffreQN) {
+      const refN = stripAccents(c._offre?.reference ?? '')
+      if (!refN.includes(refOffreQN)) return false
+    }
     return true
   })
 
+  // Tri côté serveur sur le tableau filtré. On ne touche pas à la requête
+  // Supabase parce que les champs triables vivent sur la relation `offres`
+  // (titre, reference, am_referent) — PostgREST ne sait pas ordonner sur
+  // une relation jointe sans sous-requête. À notre volume, un sort JS est
+  // parfaitement acceptable (quelques milliers de rows max).
+  const frCmp = new Intl.Collator('fr', { sensitivity: 'base' }).compare
+  const sorted = sortField
+    ? [...filtered].sort((a, b) => {
+        const mult = sortDir === 'asc' ? 1 : -1
+        switch (sortField) {
+          case 'candidat':
+            return mult * frCmp(a.nom ?? '', b.nom ?? '')
+          case 'date': {
+            const aD = a.created_at ?? ''
+            const bD = b.created_at ?? ''
+            // Les timestamps ISO se comparent lexicographiquement.
+            return mult * (aD < bD ? -1 : aD > bD ? 1 : 0)
+          }
+          case 'ref_offre':
+            return mult * frCmp(a._offre?.reference ?? '', b._offre?.reference ?? '')
+          case 'ref':
+            return mult * frCmp(a._offre?.am_referent ?? '', b._offre?.am_referent ?? '')
+          case 'offre':
+            return mult * frCmp(a._offre?.titre ?? '', b._offre?.titre ?? '')
+          case 'statut':
+            return mult * frCmp(a.statut ?? '', b.statut ?? '')
+          default:
+            return 0
+        }
+      })
+    : filtered
+
   const totalAll = all.length
-  const totalFiltered = filtered.length
-  const hasFilter = !!statut || !!ref || !!offre_id
+  const totalFiltered = sorted.length
+  const hasFilter =
+    !!statut ||
+    !!ref ||
+    !!offre_id ||
+    !!candidatQ ||
+    !!dateFilter ||
+    !!refOffreQ
 
   const fmtDate = (iso: string | null) => {
     if (!iso) return '—'
@@ -149,7 +276,10 @@ export default async function CandidaturesPage({
    * Libellé court qui résume POURQUOI une candidature « en attente »
    * n'a pas été tranchée automatiquement. Permet au recruteur de
    * comprendre d'un coup d'œil ce qu'il doit faire sans lire toute la
-   * justification IA.
+   * justification IA. Les infos candidat (nom/email) ne sont plus un
+   * motif : on peut désormais qualifier et envoyer le CV au client
+   * même si elles manquent, donc ça ne doit plus bloquer ni être
+   * signalé comme un motif d'attente.
    */
   const raisonEnAttente = (
     c: Enriched,
@@ -157,12 +287,6 @@ export default async function CandidaturesPage({
   ): { label: string; tone: 'red' | 'amber' | 'muted' } => {
     if (c.justification_ia?.startsWith('Scoring IA indisponible')) {
       return { label: 'Scoring IA échoué', tone: 'red' }
-    }
-    const missingName = !c.nom?.trim()
-    const missingEmail =
-      !c.email?.trim() || c.email.endsWith('@example.com')
-    if (missingName || missingEmail) {
-      return { label: 'Infos candidat à compléter', tone: 'amber' }
     }
     if (seuil !== null && c.score_ia !== null && c.score_ia < seuil) {
       return {
@@ -186,16 +310,17 @@ export default async function CandidaturesPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/dashboard"
-          className="text-sm text-muted hover:underline"
-        >
-          ← Retour au dashboard
-        </Link>
-        <h1 className="text-2xl font-bold mt-2">{pageTitle}</h1>
+        <h1 className="text-2xl font-bold">{pageTitle}</h1>
         <p className="text-sm text-muted mt-1">
-          Filtre par statut, référent ou offre. Clique sur une offre pour
-          y retourner et qualifier / rejeter les candidatures.
+          Filtre par candidat, date, statut, référent, offre ou référence ;
+          clique sur un en-tête de colonne pour trier. Clique sur une offre
+          pour y retourner et qualifier / rejeter les candidatures.{' '}
+          <Link
+            href="/candidatures/flottement"
+            className="text-brand-purple hover:underline"
+          >
+            Voir le flottement →
+          </Link>
         </p>
       </div>
 
@@ -208,22 +333,39 @@ export default async function CandidaturesPage({
           </h2>
           <FiltersReset fields={FILTER_FIELDS} />
         </div>
-        <table className="w-full">
+        {/* min-w-[1120px] : 9 colonnes (colonne Action retirée).
+            overflow-x-auto parent prend le relais sous cette largeur
+            pour ne pas squeezer la Justification IA. */}
+        <table className="w-full min-w-[1120px]">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
               <th scope="col" className="px-4 pt-3 pb-2">CV</th>
-              <th scope="col" className="px-4 pt-3 pb-2">Candidat</th>
+              <th scope="col" className="px-4 pt-3 pb-2">
+                <SortHeader field="candidat" label="Candidat" />
+              </th>
               <th scope="col" className="px-4 pt-3 pb-2">Score</th>
-              <th scope="col" className="px-4 pt-3 pb-2">Statut</th>
+              <th scope="col" className="px-4 pt-3 pb-2">
+                <SortHeader field="statut" label="Statut" defaultDir="asc" />
+              </th>
               <th scope="col" className="px-4 pt-3 pb-2">Justification IA</th>
-              <th scope="col" className="px-4 pt-3 pb-2">Offre</th>
-              <th scope="col" className="px-4 pt-3 pb-2">Référent</th>
-              <th scope="col" className="px-4 pt-3 pb-2">Date</th>
-              <th scope="col" className="px-4 pt-3 pb-2">Action</th>
+              <th scope="col" className="px-4 pt-3 pb-2">
+                <SortHeader field="ref_offre" label="Réf." />
+              </th>
+              <th scope="col" className="px-4 pt-3 pb-2">
+                <SortHeader field="offre" label="Offre" />
+              </th>
+              <th scope="col" className="px-4 pt-3 pb-2">
+                <SortHeader field="ref" label="Référent" />
+              </th>
+              <th scope="col" className="px-4 pt-3 pb-2">
+                <SortHeader field="date" label="Date" defaultDir="desc" />
+              </th>
             </tr>
             <tr className="align-top">
               <th className="px-4 pt-0 pb-3"></th>
-              <th className="px-4 pt-0 pb-3"></th>
+              <th className="px-4 pt-0 pb-3 font-normal normal-case">
+                <TextFilter field="candidat" placeholder="Nom…" />
+              </th>
               <th className="px-4 pt-0 pb-3"></th>
               <th className="px-4 pt-0 pb-3 font-normal normal-case">
                 <SelectFilter
@@ -233,6 +375,9 @@ export default async function CandidaturesPage({
                 />
               </th>
               <th className="px-4 pt-0 pb-3"></th>
+              <th className="px-4 pt-0 pb-3 font-normal normal-case">
+                <TextFilter field="ref_offre" placeholder="Réf…" />
+              </th>
               <th className="px-4 pt-0 pb-3 font-normal normal-case">
                 <SelectFilter
                   field="offre_id"
@@ -250,19 +395,17 @@ export default async function CandidaturesPage({
                   placeholder="Tous"
                 />
               </th>
-              <th className="px-4 pt-0 pb-3"></th>
-              <th className="px-4 pt-0 pb-3"></th>
+              <th className="px-4 pt-0 pb-3 font-normal normal-case">
+                <DateFilter field="date" />
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-soft">
-            {filtered.map((c) => {
+            {sorted.map((c) => {
               const offre = c._offre
               const hasRealEmail =
                 !!c.email?.trim() && !c.email.endsWith('@example.com')
               const isEnAttente = c.statut === 'en attente'
-              const scoringFailed =
-                c.justification_ia?.startsWith('Scoring IA indisponible') ??
-                false
               const raison = isEnAttente
                 ? raisonEnAttente(c, offre?.seuil ?? null)
                 : null
@@ -338,33 +481,24 @@ export default async function CandidaturesPage({
                       />
                     )}
                   </td>
-                  <td className="px-4 py-3 max-w-md min-w-[16rem]">
-                    {c.justification_ia?.trim() ? (
-                      <p
-                        className="text-xs text-muted leading-relaxed line-clamp-4"
-                        title={c.justification_ia}
-                      >
-                        {c.justification_ia}
-                      </p>
-                    ) : (
-                      <span className="text-muted text-xs">—</span>
-                    )}
+                  <td className="px-4 py-3 max-w-sm min-w-[13rem]">
+                    <JustificationIA
+                      pointsForts={c.points_forts}
+                      pointsFaibles={c.points_faibles}
+                      justification={c.justification_ia}
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted font-mono whitespace-nowrap">
+                    {offre?.reference ?? '—'}
                   </td>
                   <td className="px-4 py-3 min-w-0">
                     {offre ? (
-                      <>
-                        <Link
-                          href={`/offres/${offre.id}`}
-                          className="text-brand-purple hover:underline font-medium"
-                        >
-                          {offre.titre}
-                        </Link>
-                        {offre.reference && (
-                          <div className="text-xs text-muted font-mono mt-0.5">
-                            Réf. {offre.reference}
-                          </div>
-                        )}
-                      </>
+                      <Link
+                        href={`/offres/${offre.id}`}
+                        className="text-brand-purple hover:underline font-medium"
+                      >
+                        {offre.titre}
+                      </Link>
                     ) : (
                       <span className="text-muted" aria-label="Non renseigné">—</span>
                     )}
@@ -375,20 +509,10 @@ export default async function CandidaturesPage({
                   <td className="px-4 py-3 text-muted text-xs tabular-nums whitespace-nowrap">
                     {fmtDate(c.created_at)}
                   </td>
-                  <td className="px-4 py-3">
-                    {isEnAttente ? (
-                      <TrancherActions
-                        candidatureId={c.id}
-                        scoringFailed={scoringFailed}
-                      />
-                    ) : (
-                      <span className="text-muted text-xs">—</span>
-                    )}
-                  </td>
                 </tr>
               )
             })}
-            {filtered.length === 0 && (
+            {sorted.length === 0 && (
               <tr>
                 <td
                   colSpan={9}

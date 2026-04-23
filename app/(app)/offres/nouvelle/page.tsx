@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { referentFromEmail, todayIso } from '@/lib/format'
+import { referentFromUser, todayIso } from '@/lib/format'
 import { getAvailableReferents } from '@/lib/referents'
 import OffreForm from './OffreForm'
 
@@ -22,8 +22,13 @@ export default async function NouvelleOffrePage({
   ])
 
   const clients = clientsRes.data ?? []
-  const currentUserEmail = userRes.data.user?.email ?? null
-  const defaultReferent = referentFromEmail(currentUserEmail)
+  // On lit user_metadata.prenom/nom en priorité (renseignés à l'inscription)
+  // — fallback sur une heuristique email uniquement si la metadata est vide.
+  // Voir `referentFromUser` : évite les cas comme `goumiriaziz.pro@gmail.com`
+  // → « G. PRO » (faux, car split sur le point inclus dans la partie locale).
+  const defaultReferent = userRes.data.user
+    ? referentFromUser(userRes.data.user)
+    : null
 
   // Union clients.am_referent + offres.am_referent + utilisateur connecté,
   // pour que l'user courant apparaisse dans le select même s'il n'a encore

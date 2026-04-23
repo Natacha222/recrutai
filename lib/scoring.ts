@@ -21,7 +21,14 @@ import Anthropic from '@anthropic-ai/sdk'
  */
 export type ScoringResult = {
   score: number
+  /** Résumé synthétique (2-4 phrases) — conservé pour legacy et pour
+   *  afficher un fallback si les arrays ci-dessous arrivent vides. */
   justification: string
+  /** Forces principales du candidat (3-5 items concis). Source unique
+   *  pour les bullets « points forts » affichés partout dans l'UI. */
+  pointsForts: string[]
+  /** Lacunes / points à challenger (3-5 items concis). */
+  pointsFaibles: string[]
   statut: string
   candidateName?: string
   candidateEmail?: string
@@ -61,7 +68,12 @@ ${jobDescription ?? '(description non fournie)'}
 
 Seuil de qualification : ${seuil}/100.
 
-Sois factuel, concis et utile pour un recruteur pressé. Rédige la justification en français.`,
+Sois factuel, concis et utile pour un recruteur pressé. Rédige tout en français.
+
+Structure attendue côté tool call :
+- justification : résumé en 2-4 phrases.
+- points_forts : 3 à 5 puces max (items de l'array), une phrase courte chacun, axées sur la correspondance CV / attendus poste.
+- points_faibles : 3 à 5 puces max, mêmes règles. Si aucune lacune sérieuse, liste les zones à clarifier en entretien.`,
         cache_control: { type: 'ephemeral' },
       },
     ],
@@ -92,7 +104,23 @@ Sois factuel, concis et utile pour un recruteur pressé. Rédige la justificatio
             justification: {
               type: 'string',
               description:
-                "Justification factuelle en 2 à 4 phrases : forces du candidat vs attendus du poste, lacunes éventuelles, points à challenger en entretien. Pas d'intro, pas de flatterie.",
+                "Résumé court en 2 à 4 phrases : synthèse globale CV vs poste. Pas d'intro, pas de flatterie. Sert de fallback si l'UI ne peut pas afficher les listes structurées.",
+            },
+            points_forts: {
+              type: 'array',
+              items: { type: 'string' },
+              minItems: 2,
+              maxItems: 5,
+              description:
+                "Forces principales du candidat vs attendus du poste. 3 à 5 items, chacun une phrase concise (≤ 20 mots). Pas de numérotation, pas de puces, juste le contenu.",
+            },
+            points_faibles: {
+              type: 'array',
+              items: { type: 'string' },
+              minItems: 2,
+              maxItems: 5,
+              description:
+                "Lacunes ou points à challenger en entretien. 3 à 5 items, chacun une phrase concise (≤ 20 mots). Si le candidat n'a aucun gros point faible, liste des zones à clarifier ou des ambiguïtés du CV.",
             },
           },
           required: [
@@ -100,6 +128,8 @@ Sois factuel, concis et utile pour un recruteur pressé. Rédige la justificatio
             'candidate_email',
             'score',
             'justification',
+            'points_forts',
+            'points_faibles',
           ],
         },
       },
@@ -144,6 +174,8 @@ Sois factuel, concis et utile pour un recruteur pressé. Rédige la justificatio
     candidate_email?: string
     score?: number
     justification?: string
+    points_forts?: unknown
+    points_faibles?: unknown
   }
 
   const score = Math.min(
@@ -157,9 +189,21 @@ Sois factuel, concis et utile pour un recruteur pressé. Rédige la justificatio
   const candidateName = (input.candidate_name ?? '').trim()
   const candidateEmail = (input.candidate_email ?? '').trim()
 
+  // Sanitize : on accepte uniquement les arrays de strings non vides. Une
+  // réponse mal formée (string, null, array de numbers…) donne un array
+  // vide plutôt que de crasher — l'UI retombera sur `justification`.
+  const cleanArr = (val: unknown): string[] =>
+    Array.isArray(val)
+      ? val
+          .map((x) => (typeof x === 'string' ? x.trim() : ''))
+          .filter((x) => x.length > 0)
+      : []
+
   return {
     score,
     justification,
+    pointsForts: cleanArr(input.points_forts),
+    pointsFaibles: cleanArr(input.points_faibles),
     statut,
     candidateName: candidateName || undefined,
     candidateEmail: candidateEmail || undefined,
