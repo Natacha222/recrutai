@@ -34,7 +34,7 @@ export async function extractPointsFromJustification(
     model: 'claude-sonnet-4-5',
     max_tokens: 1024,
     system:
-      "Tu es un assistant qui structure des analyses de CV. On te donne une synthèse (2-4 phrases) rédigée par un recruteur IA sur la correspondance d'un candidat à une offre. Ta tâche : extraire 3-4 points forts et 3-4 points faibles concis, en français, fidèles au texte fourni (n'ajoute rien qui n'y soit pas). Si la synthèse ne mentionne quasi aucun point faible explicite, liste des zones à clarifier ou des ambiguïtés en entretien. Appelle ensuite l'outil extract_points.",
+      "Tu es un assistant qui structure des analyses de CV. On te donne une synthèse (2-4 phrases) rédigée par un recruteur IA sur la correspondance d'un candidat à une offre. Ta tâche : extraire 3-4 points forts et 3-4 points faibles en français, fidèles au texte fourni (n'ajoute rien qui n'y soit pas), et TRÈS concis — chaque item doit tenir en 3 à 6 mots max, style « tag » / mot-clé, PAS de phrase complète. Exemples attendus : « 5 ans React », « Anglais C1 », « Pas de Kubernetes », « Junior en management ». Si la synthèse ne mentionne quasi aucun point faible explicite, liste des zones à clarifier en entretien, toujours en quelques mots. Appelle ensuite l'outil extract_points.",
     tools: [
       {
         name: 'extract_points',
@@ -49,7 +49,7 @@ export async function extractPointsFromJustification(
               minItems: 2,
               maxItems: 5,
               description:
-                "Forces principales du candidat vs attendus du poste. 3 à 4 items, chacun une phrase concise (≤ 20 mots).",
+                "Forces principales du candidat vs attendus du poste. 3 à 4 items, chacun TRÈS court — 3 à 6 mots max, style « tag » / mot-clé. Exemples : « 5 ans React », « Anglais C1 », « Management équipe 8 pers. ». Pas de phrase complète.",
             },
             points_faibles: {
               type: 'array',
@@ -57,7 +57,7 @@ export async function extractPointsFromJustification(
               minItems: 2,
               maxItems: 5,
               description:
-                "Lacunes ou points à challenger en entretien. 3 à 4 items, chacun une phrase concise (≤ 20 mots).",
+                "Lacunes ou points à challenger en entretien. 3 à 4 items, chacun TRÈS court — 3 à 6 mots max, style « tag ». Exemples : « Pas de Kubernetes », « Anglais B1 », « Junior en management ». Pas de phrase complète.",
             },
           },
           required: ['points_forts', 'points_faibles'],

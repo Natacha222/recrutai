@@ -72,8 +72,8 @@ Sois factuel, concis et utile pour un recruteur pressé. Rédige tout en frança
 
 Structure attendue côté tool call :
 - justification : résumé en 2-4 phrases.
-- points_forts : 3 à 5 puces max (items de l'array), une phrase courte chacun, axées sur la correspondance CV / attendus poste.
-- points_faibles : 3 à 5 puces max, mêmes règles. Si aucune lacune sérieuse, liste les zones à clarifier en entretien.`,
+- points_forts : 3 à 5 puces max (items de l'array), TRÈS concis — quelques mots seulement (3 à 6 mots max par item), style « tag » / mot-clé, PAS de phrase complète. Exemples : « 5 ans React », « Anglais C1 », « Management équipe 8 pers. », « Secteur banque/assurance ».
+- points_faibles : 3 à 5 puces max, mêmes règles de brièveté (3 à 6 mots max, pas de phrase). Si aucune lacune sérieuse, liste des zones à clarifier en entretien, toujours en quelques mots. Exemples : « Pas de Kubernetes », « Anglais B1 », « Junior en management ».`,
         cache_control: { type: 'ephemeral' },
       },
     ],
@@ -112,7 +112,7 @@ Structure attendue côté tool call :
               minItems: 2,
               maxItems: 5,
               description:
-                "Forces principales du candidat vs attendus du poste. 3 à 5 items, chacun une phrase concise (≤ 20 mots). Pas de numérotation, pas de puces, juste le contenu.",
+                "Forces principales du candidat vs attendus du poste. 3 à 5 items, chacun TRÈS court — 3 à 6 mots max, style « tag » / mot-clé. Exemples : « 5 ans React », « Anglais C1 », « Management équipe 8 pers. ». Pas de phrase complète, pas de numérotation.",
             },
             points_faibles: {
               type: 'array',
@@ -120,7 +120,7 @@ Structure attendue côté tool call :
               minItems: 2,
               maxItems: 5,
               description:
-                "Lacunes ou points à challenger en entretien. 3 à 5 items, chacun une phrase concise (≤ 20 mots). Si le candidat n'a aucun gros point faible, liste des zones à clarifier ou des ambiguïtés du CV.",
+                "Lacunes ou points à challenger en entretien. 3 à 5 items, chacun TRÈS court — 3 à 6 mots max, style « tag ». Exemples : « Pas de Kubernetes », « Anglais B1 », « Junior en management ». Si aucun gros point faible, lister des zones à clarifier, toujours en quelques mots. Pas de phrase complète.",
             },
           },
           required: [
