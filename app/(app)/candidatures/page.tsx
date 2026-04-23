@@ -11,6 +11,7 @@ import StatusBadge from '@/components/StatusBadge'
 import ResendEmailAction from '@/components/ResendEmailAction'
 import JustificationIA from '@/components/JustificationIA'
 import { scoreColor } from '@/lib/format'
+import CandidatureActions from '../offres/[id]/CandidatureActions'
 
 /**
  * Liste globale des candidatures, filtrable par statut, référent et offre.
@@ -19,9 +20,10 @@ import { scoreColor } from '@/lib/format'
  *
  * Pour chaque « en attente », on affiche la raison (scoring IA échoué,
  * sous le seuil, à trancher) + les points forts/faibles (dépliables via
- * JustificationIA) pour que le recruteur sache d'un coup d'œil où il en
- * est. Pas de boutons d'action ici : le tranche se fait sur la fiche
- * offre (cohérent avec le workflow qui déclenche aussi l'email client).
+ * JustificationIA) + les boutons Qualifier / Rejeter directement dans la
+ * colonne Action. La qualification déclenche automatiquement l'envoi de
+ * l'email au client avec le CV en pièce jointe (même flow que depuis la
+ * fiche offre, via `qualifyCandidature`).
  */
 
 export const dynamic = 'force-dynamic'
@@ -313,8 +315,10 @@ export default async function CandidaturesPage({
         <h1 className="text-2xl font-bold">{pageTitle}</h1>
         <p className="text-sm text-muted mt-1">
           Filtre par candidat, date, statut, référent, offre ou référence ;
-          clique sur un en-tête de colonne pour trier. Clique sur une offre
-          pour y retourner et qualifier / rejeter les candidatures.{' '}
+          clique sur un en-tête de colonne pour trier. Qualifie ou rejette
+          les candidatures en attente directement depuis la colonne Action
+          — la qualification envoie automatiquement l&apos;email au client
+          avec le CV en pièce jointe.{' '}
           <Link
             href="/candidatures/flottement"
             className="text-brand-purple hover:underline"
@@ -333,10 +337,10 @@ export default async function CandidaturesPage({
           </h2>
           <FiltersReset fields={FILTER_FIELDS} />
         </div>
-        {/* min-w-[1120px] : 9 colonnes (colonne Action retirée).
-            overflow-x-auto parent prend le relais sous cette largeur
-            pour ne pas squeezer la Justification IA. */}
-        <table className="w-full min-w-[1120px]">
+        {/* min-w-[1320px] : 10 colonnes (Action ré-ajoutée pour Qualifier /
+            Rejeter en ligne). overflow-x-auto parent prend le relais sous
+            cette largeur pour ne pas squeezer la Justification IA. */}
+        <table className="w-full min-w-[1320px]">
           <thead className="bg-surface">
             <tr className="text-left text-xs font-semibold text-muted uppercase">
               <th scope="col" className="px-4 pt-3 pb-2">CV</th>
@@ -360,6 +364,7 @@ export default async function CandidaturesPage({
               <th scope="col" className="px-4 pt-3 pb-2">
                 <SortHeader field="date" label="Date" defaultDir="desc" />
               </th>
+              <th scope="col" className="px-4 pt-3 pb-2">Action</th>
             </tr>
             <tr className="align-top">
               <th className="px-4 pt-0 pb-3"></th>
@@ -398,6 +403,7 @@ export default async function CandidaturesPage({
               <th className="px-4 pt-0 pb-3 font-normal normal-case">
                 <DateFilter field="date" />
               </th>
+              <th className="px-4 pt-0 pb-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-soft">
@@ -509,13 +515,22 @@ export default async function CandidaturesPage({
                   <td className="px-4 py-3 text-muted text-xs tabular-nums whitespace-nowrap">
                     {fmtDate(c.created_at)}
                   </td>
+                  <td className="px-4 py-3">
+                    {isEnAttente ? (
+                      <CandidatureActions candidatureId={c.id} />
+                    ) : (
+                      <span className="text-muted" aria-label="Aucune action disponible">
+                        —
+                      </span>
+                    )}
+                  </td>
                 </tr>
               )
             })}
             {sorted.length === 0 && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-4 py-8 text-center text-muted text-sm"
                 >
                   {totalAll === 0
