@@ -455,36 +455,49 @@ export async function ingestCVs({
   } else if (qualified.length === 0) {
     skippedReason = 'Aucun CV n\'a atteint le seuil.'
   } else {
-    const results = await Promise.allSettled(
-      qualified.map(async (p) => {
-        const res = await sendQualifiedCandidateEmail({
-          to: notifTo,
-          offreReference: offre.reference,
-          offreTitle: offre.titre,
-          candidateName: p.row.nom,
-          candidateEmail: p.row.email,
-          score: p.row.score_ia,
-          seuil: offre.seuil,
-          justification: p.row.justification_ia,
-          pointsForts: p.row.points_forts,
-          pointsFaibles: p.row.points_faibles,
-          cvBuffer: p.cvBuffer,
-          cvFilename: p.upload.filename,
-        })
-        // Persiste l'état avant de throw pour le comptage — on veut
-        // TOUJOURS laisser une trace en DB, qu'on ait réussi ou non.
-        const id = pathToId.get(p.row.cv_path)
-        if (id) await persistEmailResult(supabase, id, res)
-        if (!res.ok) throw new Error(res.error)
+    // Envois SÉQUENTIELS avec throttle inter-messages pour rester sous le
+    // rate limit Resend (5 req/sec). On prend 250ms entre deux envois
+    // = max 4 req/sec, soit une marge d'~1 req/sec sous la limite.
+    //
+    // Rationale : avant ce changement, on fanouitait tout en parallèle via
+    // `Promise.allSettled(qualified.map(sendEmail))`. Dès 6+ CVs qualifiés
+    // dans un même batch, les emails suivants se faisaient rejeter par
+    // Resend avec « Too many requests » — ils étaient donc rétrogradés en
+    // « en attente » avec un badge ⚠️ et l'AM devait cliquer « Renvoyer »
+    // un par un. Cf. V37 (Isabelle Mercier + Romain Delacroix migrés à la
+    // main). 250ms * 50 CVs ≈ 12s de latence supplémentaire dans le pire
+    // cas — acceptable vs. passer le scoring IA (déjà plusieurs secondes).
+    const RESEND_THROTTLE_MS = 250
+    for (let i = 0; i < qualified.length; i++) {
+      const p = qualified[i]
+      const res = await sendQualifiedCandidateEmail({
+        to: notifTo,
+        offreReference: offre.reference,
+        offreTitle: offre.titre,
+        candidateName: p.row.nom,
+        candidateEmail: p.row.email,
+        score: p.row.score_ia,
+        seuil: offre.seuil,
+        justification: p.row.justification_ia,
+        pointsForts: p.row.points_forts,
+        pointsFaibles: p.row.points_faibles,
+        cvBuffer: p.cvBuffer,
+        cvFilename: p.upload.filename,
       })
-    )
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
+      // Persiste le résultat dans TOUS les cas — source de vérité du badge
+      // ⚠️ et du bouton « Renvoyer ». persistEmailResult synchronise aussi
+      // `statut` (qualifié / en attente selon succès/échec — cf. V37).
+      const id = pathToId.get(p.row.cv_path)
+      if (id) await persistEmailResult(supabase, id, res)
+      if (res.ok) {
         sentCount += 1
       } else {
-        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason)
-        console.error(`[ingestCVs] envoi email échoué : ${msg}`)
-        notifErrors.push(msg)
+        console.error(`[ingestCVs] envoi email échoué : ${res.error}`)
+        notifErrors.push(res.error)
+      }
+      // Pas de pause après le dernier envoi — inutile.
+      if (i < qualified.length - 1) {
+        await new Promise((r) => setTimeout(r, RESEND_THROTTLE_MS))
       }
     }
   }
