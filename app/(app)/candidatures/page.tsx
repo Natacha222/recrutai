@@ -483,12 +483,16 @@ export default async function CandidaturesPage({
                         {raison.label}
                       </div>
                     )}
-                    {/* Alerte + relance : candidature qualifiée mais le
-                        dernier envoi email a échoué. Inline sous le badge
-                        statut pour que l'AM voie les deux d'un coup d'œil
-                        (le candidat est bien passé mais le client n'a
-                        pas encore été notifié). */}
-                    {c.statut === 'qualifié' && c.email_error && (
+                    {/* Alerte + relance : le dernier envoi email a échoué.
+                        Le filtre se base uniquement sur `email_error` car
+                        cette colonne n'est posée QUE quand on a tenté un
+                        envoi — elle identifie donc uniquement les
+                        candidatures qualifiées (ou rétrogradées en « en
+                        attente » par persistEmailResult après échec).
+                        Inline sous le badge statut pour que l'AM voie les
+                        deux d'un coup d'œil (le candidat est bien passé
+                        mais le client n'a pas encore été notifié). */}
+                    {c.email_error && (
                       <ResendEmailAction
                         candidatureId={c.id}
                         emailError={c.email_error}

@@ -485,11 +485,15 @@ export default async function OffreDetailPage({
                 </td>
                 <td className="px-6 py-4">
                   <StatusBadge status={c.statut ?? 'en attente'} />
-                  {/* Alerte + relance : candidature qualifiée mais dernier
-                      envoi email a échoué (Resend, contact manquant…).
-                      Inline sous le badge statut pour que l'AM voie les
-                      deux d'un coup d'œil. */}
-                  {c.statut === 'qualifié' && c.email_error && (
+                  {/* Alerte + relance : dernier envoi email a échoué
+                      (Resend, contact manquant…). Le filtre se base sur
+                      `email_error` seul : cette colonne n'est posée QUE
+                      quand on a tenté un envoi, elle identifie donc à la
+                      fois les candidatures qualifiées (retry) et celles
+                      rétrogradées en « en attente » par persistEmailResult
+                      après échec (voir lib/email.ts). Inline sous le badge
+                      statut pour que l'AM voie les deux d'un coup d'œil. */}
+                  {c.email_error && (
                     <ResendEmailAction
                       candidatureId={c.id}
                       emailError={c.email_error}

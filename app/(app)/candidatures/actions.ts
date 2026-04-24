@@ -40,6 +40,7 @@ type ResendCandRow = {
   statut: string | null
   cv_path: string | null
   cv_filename: string | null
+  email_error: string | null
   offres:
     | {
         id: string
@@ -81,7 +82,7 @@ export async function resendQualifiedEmail(
   const { data: candRaw, error: candErr } = await supabase
     .from('candidatures')
     .select(
-      'id, offre_id, nom, email, score_ia, justification_ia, points_forts, points_faibles, statut, cv_path, cv_filename, offres(id, titre, reference, seuil, statut, date_validite, clients(contact_email))'
+      'id, offre_id, nom, email, score_ia, justification_ia, points_forts, points_faibles, statut, cv_path, cv_filename, email_error, offres(id, titre, reference, seuil, statut, date_validite, clients(contact_email))'
     )
     .eq('id', candidatureId)
     .single()
@@ -96,10 +97,16 @@ export async function resendQualifiedEmail(
     return { ok: false, error: "Pas d'offre liée — renvoi impossible." }
   }
 
-  // Bloque l'appel si la candidature n'est pas/plus qualifiée : l'email de
-  // notification n'a de sens que pour un candidat qualifié. Cas edge : un
-  // AM aurait ré-ouvert la page, le statut aurait changé entre-temps.
-  if (cand.statut !== 'qualifié') {
+  // Bloque l'appel si la candidature n'est pas dans un état « destinée à
+  // être qualifiée » : soit `qualifié` (cas normal où l'AM relance une
+  // notification qui a raté), soit `en attente` avec un `email_error` (cas
+  // où la candidature a été rétrogradée par `persistEmailResult` après un
+  // premier envoi échoué — voir lib/email.ts). Tout autre état (rejeté,
+  // ou `en attente` sans email_error = score sous seuil) ne doit pas
+  // recevoir d'email : ça n'aurait pas de sens côté client.
+  const isAwaitingRetry =
+    cand.statut === 'en attente' && !!cand.email_error
+  if (cand.statut !== 'qualifié' && !isAwaitingRetry) {
     return {
       ok: false,
       error:

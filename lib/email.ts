@@ -11,15 +11,31 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 export type EmailSendResult = { ok: true } | { ok: false; error: string }
 
 /**
- * Persiste l'état courant du dernier envoi d'email pour une candidature.
+ * Persiste l'état courant du dernier envoi d'email pour une candidature,
+ * ET synchronise le `statut` avec ce résultat.
  *
  * À appeler systématiquement juste après chaque `sendQualifiedCandidateEmail`.
- * Les deux colonnes `email_sent_at` / `email_error` reflètent toujours l'ÉTAT
- * COURANT (dernière tentative uniquement), pas l'historique :
- *   - succès → sent_at = now(), error = NULL
- *   - échec  → sent_at = NULL,  error = message
- * Cela simplifie la logique UI : « statut = qualifié ET email_error != NULL »
- * ⇒ afficher badge d'alerte + bouton « Renvoyer ».
+ * Les colonnes reflètent toujours l'ÉTAT COURANT (dernière tentative
+ * uniquement), pas l'historique :
+ *   - succès → sent_at = now(), error = NULL, statut = 'qualifié'
+ *   - échec  → sent_at = NULL,  error = message, statut = 'en attente'
+ *
+ * Rationale du retour en « en attente » sur échec (décidé avec l'utilisateur) :
+ * sans ça, une candidature dont le mail a raté reste « qualifié » et se
+ * perd dans le compteur vert du dashboard — l'AM doit ouvrir la fiche
+ * offre pour voir le badge ⚠️ et la relancer. En la basculant en « en
+ * attente » tant que le mail n'est pas parti, elle apparaît dans le
+ * compteur orange « CV en attente » du dashboard, qui sert de filet de
+ * sécurité visuel. Quand le bouton « Renvoyer » passe, persistEmailResult
+ * la remet automatiquement en « qualifié ».
+ *
+ * L'invariant qui en découle, utilisé par toute la logique UI :
+ *   - « email_error != NULL » ⇒ badge ⚠️ + bouton Renvoyer (quel que soit
+ *     le statut, qui vaut 'en attente' dans ce cas)
+ *   - « statut = 'qualifié' »  ⇒ email forcément parti (email_error = NULL)
+ *   - « statut = 'en attente' » ⇒ soit score sous seuil (email_error NULL),
+ *     soit qualifié avec email en échec (email_error != NULL) — le badge
+ *     et le score_ia permettent de distinguer les deux.
  *
  * Si l'UPDATE lui-même échoue (cas rarissime — Supabase down, RLS cassée),
  * on se contente de logguer : on ne veut surtout pas masquer le vrai
@@ -32,8 +48,16 @@ export async function persistEmailResult(
   result: EmailSendResult
 ): Promise<void> {
   const payload = result.ok
-    ? { email_sent_at: new Date().toISOString(), email_error: null }
-    : { email_sent_at: null, email_error: result.error }
+    ? {
+        email_sent_at: new Date().toISOString(),
+        email_error: null,
+        statut: 'qualifié',
+      }
+    : {
+        email_sent_at: null,
+        email_error: result.error,
+        statut: 'en attente',
+      }
   const { error } = await supabase
     .from('candidatures')
     .update(payload)

@@ -33,11 +33,17 @@ export default function CandidatureActions({
         return
       }
       setStatus('success')
+      // Sur échec d'envoi, `persistEmailResult` (lib/email.ts) rétrograde
+      // la candidature en « en attente ». On ne dit donc plus « Qualifié. »
+      // quand le mail n'est pas parti — ce serait faux en base. Le
+      // skippedReason seul suffit (l'AM verra le badge ⚠️ + Renvoyer
+      // après refresh). Cas edge « déjà tranchée » : la candidature n'a
+      // pas bougé du tout, on reste sur son skippedReason propre.
       setMessage(
         res.emailSent
           ? 'Qualifié et email envoyé au client.'
           : res.skippedReason
-            ? `Qualifié. Email non envoyé : ${res.skippedReason}`
+            ? `Email non envoyé : ${res.skippedReason}`
             : 'Qualifié.'
       )
     })
