@@ -23,6 +23,18 @@ export default function CandidatureActions({
   const [message, setMessage] = useState<string>('')
 
   function handleQualify() {
+    // Confirmation explicite : ce bouton n'apparaît que pour les candidatures
+    // « en attente » (voir pages parentes /offres/[id] et /candidatures), or
+    // qualifier déclenche automatiquement l'envoi du CV au client par email.
+    // Un AM qui clique par réflexe ou se trompe de ligne ne doit pas pouvoir
+    // envoyer un candidat au client sans s'en rendre compte — d'où le
+    // confirm() natif, cohérent avec celui de handleReject.
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm('Qualifier et envoyer le CV au client par email ?')
+    ) {
+      return
+    }
     setStatus('idle')
     setMessage('')
     startTransition(async () => {
