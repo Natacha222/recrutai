@@ -196,7 +196,12 @@ export default async function DashboardPage({
       key: 'en attente',
       label: 'En attente',
       count: statutCounts['en attente'] ?? 0,
-      color: 'var(--color-status-amber)',
+      // Override volontaire de --color-status-amber (#8B6100, mustard
+      // foncé) qui rendait la part « marron » et peu visible en fill SVG
+      // plein. On garde l'amber dans StatusBadge (texte foncé sur fond
+      // crème = lisible), mais ici on bascule sur un orange vif pour
+      // contraster avec le vert et le rouge des autres parts.
+      color: '#F97316',
       href: hrefFor('en attente'),
     },
     {
