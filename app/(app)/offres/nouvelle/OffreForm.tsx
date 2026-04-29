@@ -220,7 +220,7 @@ export default function OffreForm({
   return (
     <>
       {/* En-tête : bouton d'import PDF compact */}
-      <div className="flex items-start justify-end gap-4 flex-wrap mb-4">
+      <div className="flex items-start justify-end gap-4 flex-wrap mb-3">
         {/* A11y : on utilise htmlFor + sr-only (au lieu de `hidden`) pour que
             le `<input type="file">` reste focusable au clavier. Le label
             montre un focus ring via `focus-within:` quand l'input caché a
@@ -504,9 +504,8 @@ export default function OffreForm({
               }`}
             />
             <p id="seuil_help" className="text-xs text-muted mt-1">
-              Entier entre 50 et 100. Conseils : ~50 pour un métier en
-              tension (on élargit le vivier), ~80 pour un recrutement plus
-              classique (on resserre sur les profils proches de la cible).
+              Conseils : ~50 pour un métier en tension, ~80 pour un
+              recrutement plus classique.
             </p>
             {!seuilIsValid && (
               <p id="seuil_error" className="text-xs text-status-red mt-1">

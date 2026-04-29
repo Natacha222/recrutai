@@ -244,9 +244,8 @@ export default function EditOffreForm({
             </p>
           ) : (
             <p className="text-xs text-muted mt-1">
-              Entier entre 50 et 100. Conseils : ~50 pour un métier en
-              tension (on élargit le vivier), ~80 pour un recrutement plus
-              classique (on resserre sur les profils proches de la cible).
+              Conseils : ~50 pour un métier en tension, ~80 pour un
+              recrutement plus classique.
             </p>
           )}
         </div>

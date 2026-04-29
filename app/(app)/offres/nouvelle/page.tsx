@@ -39,7 +39,7 @@ export default async function NouvelleOffrePage({
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-bold mb-6">Offre d&apos;emploi</h1>
+      <h1 className="text-2xl font-bold mb-3">Offre d&apos;emploi</h1>
 
       {error && (
         <div
