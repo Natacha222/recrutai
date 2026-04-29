@@ -150,7 +150,7 @@ export default async function OffresPage({
   const { data: offres } = await supabase
     .from('offres')
     .select(
-      'id, reference, titre, lieu, statut, contrat, seuil, created_at, date_validite, am_referent, clients(nom), candidatures(id, statut)'
+      'id, reference, titre, lieu, statut, contrat, seuil, created_at, date_validite, am_referent, client_id, clients(nom), candidatures(id, statut)'
     )
 
   const allOffres = (offres ?? []).map((o) => {
@@ -469,7 +469,23 @@ export default async function OffresPage({
                     </div>
                   )}
                 </td>
-                <td className="px-6 py-5 text-muted">{o.clientNom ?? '—'}</td>
+                <td className="px-6 py-5">
+                  {/* Lien vers la fiche client : on hover-underline pour
+                      signaler l'affordance sans alourdir la table (le nom
+                      reste en text-muted comme avant pour ne pas voler la
+                      vedette au titre de l'offre, qui est l'action
+                      principale de la ligne). */}
+                  {o.client_id && o.clientNom ? (
+                    <Link
+                      href={`/clients/${o.client_id}`}
+                      className="text-muted hover:text-brand-purple hover:underline transition-colors"
+                    >
+                      {o.clientNom}
+                    </Link>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
+                </td>
                 <td className="px-6 py-5 text-muted">
                   {o.am_referent ?? '—'}
                 </td>
