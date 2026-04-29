@@ -1,17 +1,5 @@
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import {
-  DateFilter,
-  FiltersReset,
-  SelectFilter,
-  SortHeader,
-  TextFilter,
-} from '@/components/TableFilters'
-import StatusBadge from '@/components/StatusBadge'
-import ResendEmailAction from '@/components/ResendEmailAction'
-import JustificationIA from '@/components/JustificationIA'
-import { scoreColor } from '@/lib/format'
-import CandidatureActions from '../offres/[id]/CandidatureActions'
+import CandidaturesTable, { type Enriched } from './CandidaturesTable'
 
 /**
  * Liste globale des candidatures, filtrable par statut, référent et offre.
@@ -28,23 +16,11 @@ import CandidatureActions from '../offres/[id]/CandidatureActions'
 
 export const dynamic = 'force-dynamic'
 
-// Statuts de la colonne `candidatures.statut`. Le select filtre affiche
-// une option par entrée — ordre choisi pour que « En attente » (le plus
-// actionnable) remonte en premier.
-const STATUTS = ['en attente', 'qualifié', 'rejeté'] as const
-
-// Tous les paramètres URL (filtres + tri) que le bouton « Réinitialiser »
-// doit purger pour remettre la table à son état par défaut.
-const FILTER_FIELDS = [
-  'statut',
-  'ref',
-  'offre_id',
-  'candidat',
-  'date',
-  'ref_offre',
-  'sort',
-  'dir',
-]
+// Note V47 : les constantes STATUTS et FILTER_FIELDS, ainsi que le
+// rendu de la table (thead + filtres + tbody + compteur), ont été
+// déplacées dans CandidaturesTable.tsx (Client Component) pour la
+// pagination par scroll infini. Cette page reste un Server Component
+// qui fait le filtre + tri en JS comme avant.
 
 type SortField =
   | 'candidat'
@@ -155,16 +131,6 @@ export default async function CandidaturesPage({
     )
     .order('created_at', { ascending: false })
 
-  type Enriched = CandidatureRow & {
-    _offre: {
-      id: string
-      titre: string
-      reference: string | null
-      seuil: number | null
-      am_referent: string | null
-    } | null
-  }
-
   const all: Enriched[] = ((rows ?? []) as CandidatureRow[]).map((c) => {
     const offre = Array.isArray(c.offres)
       ? (c.offres[0] ?? null)
@@ -200,7 +166,7 @@ export default async function CandidaturesPage({
       .trim()
       .toLowerCase()
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\p{Mn}/gu, '')
   const candidatQN = stripAccents(candidatQ)
   const refOffreQN = stripAccents(refOffreQ)
 
@@ -279,40 +245,6 @@ export default async function CandidaturesPage({
     !!dateFilter ||
     !!refOffreQ
 
-  const fmtDate = (iso: string | null) => {
-    if (!iso) return '—'
-    const d = new Date(iso)
-    const jj = String(d.getDate()).padStart(2, '0')
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    return `${jj}/${mm}/${d.getFullYear()}`
-  }
-
-  /**
-   * Libellé court qui résume POURQUOI une candidature « en attente »
-   * n'a pas été tranchée automatiquement. Permet au recruteur de
-   * comprendre d'un coup d'œil ce qu'il doit faire sans lire toute la
-   * justification IA. Les infos candidat (nom/email) ne sont plus un
-   * motif : on peut désormais qualifier et envoyer le CV au client
-   * même si elles manquent, donc ça ne doit plus bloquer ni être
-   * signalé comme un motif d'attente.
-   *
-   * Le cas « score < seuil » a été retiré (V45) : la colonne Score à
-   * gauche montre déjà la valeur (avec scoreColor → ambre/rouge selon
-   * la position vs seuil), donc le doublon « Sous le seuil (72/80) »
-   * dans la colonne Statut était redondant. Les candidatures
-   * concernées retombent maintenant sur « À trancher manuellement »,
-   * qui est plus actionnable (dit ce qu'il faut FAIRE, pas juste ce
-   * qui ne va pas).
-   */
-  const raisonEnAttente = (
-    c: Enriched
-  ): { label: string; tone: 'red' | 'muted' } => {
-    if (c.justification_ia?.startsWith('Scoring IA indisponible')) {
-      return { label: 'Scoring IA échoué', tone: 'red' }
-    }
-    return { label: 'À trancher manuellement', tone: 'muted' }
-  }
-
   // Libellé de page adapté au filtre statut actif, pour que le <h1> et le
   // <title> reflètent le sous-ensemble qu'on regarde.
   const pageTitle = statut
@@ -329,227 +261,14 @@ export default async function CandidaturesPage({
         <h1 className="text-2xl font-bold">{pageTitle}</h1>
       </div>
 
-      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
-        <div className="px-6 py-4 border-b border-border-soft flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="font-semibold">
-            {hasFilter
-              ? `${totalFiltered} résultat${totalFiltered > 1 ? 's' : ''} sur ${totalAll}`
-              : `${totalAll} candidature${totalAll > 1 ? 's' : ''}`}
-          </h2>
-          <FiltersReset fields={FILTER_FIELDS} />
-        </div>
-        {/* min-w-[1180px] : 10 colonnes (Action incluse). Padding des
-            cellules resserré (px-3) et colonne Candidat bornée pour tenir
-            sur un écran standard sans scroll horizontal. overflow-x-auto
-            parent prend le relais sous cette largeur. */}
-        <table className="w-full min-w-[1180px]">
-          <thead className="bg-surface">
-            <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <th scope="col" className="px-3 pt-3 pb-2">CV</th>
-              <th scope="col" className="px-3 pt-3 pb-2">
-                <SortHeader field="candidat" label="Candidat" />
-              </th>
-              <th scope="col" className="px-3 pt-3 pb-2">
-                <SortHeader field="score" label="Score" defaultDir="desc" />
-              </th>
-              <th scope="col" className="px-3 pt-3 pb-2">
-                <SortHeader field="statut" label="Statut" defaultDir="asc" />
-              </th>
-              <th scope="col" className="px-3 pt-3 pb-2">Justification IA</th>
-              <th scope="col" className="px-3 pt-3 pb-2">
-                <SortHeader field="ref_offre" label="Réf." />
-              </th>
-              <th scope="col" className="px-3 pt-3 pb-2">
-                <SortHeader field="offre" label="Offre" />
-              </th>
-              <th scope="col" className="px-3 pt-3 pb-2">
-                <SortHeader field="ref" label="Référent" />
-              </th>
-              <th scope="col" className="px-3 pt-3 pb-2">
-                <SortHeader field="date" label="Date" defaultDir="desc" />
-              </th>
-              <th scope="col" className="px-3 pt-3 pb-2">Action</th>
-            </tr>
-            <tr className="align-top">
-              <th className="px-3 pt-0 pb-3"></th>
-              <th className="px-3 pt-0 pb-3 font-normal normal-case">
-                <TextFilter field="candidat" placeholder="Nom…" />
-              </th>
-              <th className="px-3 pt-0 pb-3"></th>
-              <th className="px-3 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="statut"
-                  options={[...STATUTS]}
-                  placeholder="Tous"
-                />
-              </th>
-              <th className="px-3 pt-0 pb-3"></th>
-              <th className="px-3 pt-0 pb-3 font-normal normal-case">
-                <TextFilter field="ref_offre" placeholder="Réf…" />
-              </th>
-              <th className="px-3 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="offre_id"
-                  options={offresOptions.map((o) => o.id)}
-                  labels={Object.fromEntries(
-                    offresOptions.map((o) => [o.id, o.titre])
-                  )}
-                  placeholder="Toutes"
-                />
-              </th>
-              <th className="px-3 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="ref"
-                  options={amReferents}
-                  placeholder="Tous"
-                />
-              </th>
-              <th className="px-3 pt-0 pb-3 font-normal normal-case">
-                <DateFilter field="date" />
-              </th>
-              <th className="px-3 pt-0 pb-3"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-soft">
-            {sorted.map((c) => {
-              const offre = c._offre
-              const hasRealEmail =
-                !!c.email?.trim() && !c.email.endsWith('@example.com')
-              const isEnAttente = c.statut === 'en attente'
-              const raison = isEnAttente ? raisonEnAttente(c) : null
-              const raisonClass =
-                raison?.tone === 'red' ? 'text-status-red' : 'text-muted'
-              return (
-                <tr key={c.id} className="text-sm align-top">
-                  <td className="px-3 py-3">
-                    {c.cv_url ? (
-                      <a
-                        href={c.cv_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-brand-purple text-brand-purple text-xs font-semibold hover:bg-brand-purple hover:text-white transition-colors w-fit whitespace-nowrap"
-                      >
-                        <span aria-hidden="true">📄</span> CV
-                      </a>
-                    ) : (
-                      <span className="text-muted" aria-label="Non renseigné">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 min-w-0 max-w-[11rem]">
-                    <div
-                      className="font-medium truncate"
-                      title={c.nom?.trim() || undefined}
-                    >
-                      {c.nom?.trim() || '—'}
-                    </div>
-                    {hasRealEmail ? (
-                      <a
-                        href={`mailto:${c.email}`}
-                        className="block text-xs text-brand-purple hover:underline truncate"
-                        title={c.email ?? undefined}
-                      >
-                        {c.email}
-                      </a>
-                    ) : (
-                      <div className="text-xs text-muted italic">
-                        email non extrait
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    <span
-                      className={`font-bold text-lg ${scoreColor(c.score_ia, offre?.seuil ?? null)}`}
-                    >
-                      {c.score_ia ?? '—'}
-                    </span>
-                    {offre?.seuil != null && c.score_ia != null && (
-                      <span className="text-xs text-muted">
-                        {' '}
-                        / {offre.seuil}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3">
-                    <StatusBadge status={c.statut ?? 'en attente'} />
-                    {raison && (
-                      <div
-                        className={`text-xs mt-1 font-medium ${raisonClass}`}
-                      >
-                        {raison.label}
-                      </div>
-                    )}
-                    {/* Alerte + relance : le dernier envoi email a échoué.
-                        Le filtre se base uniquement sur `email_error` car
-                        cette colonne n'est posée QUE quand on a tenté un
-                        envoi — elle identifie donc uniquement les
-                        candidatures qualifiées (ou rétrogradées en « en
-                        attente » par persistEmailResult après échec).
-                        Inline sous le badge statut pour que l'AM voie les
-                        deux d'un coup d'œil (le candidat est bien passé
-                        mais le client n'a pas encore été notifié). */}
-                    {c.email_error && (
-                      <ResendEmailAction
-                        candidatureId={c.id}
-                        emailError={c.email_error}
-                        size="sm"
-                      />
-                    )}
-                  </td>
-                  <td className="px-3 py-3 max-w-xs min-w-[11rem]">
-                    <JustificationIA
-                      pointsForts={c.points_forts}
-                      pointsFaibles={c.points_faibles}
-                      justification={c.justification_ia}
-                    />
-                  </td>
-                  <td className="px-3 py-3 text-xs text-muted font-mono whitespace-nowrap">
-                    {offre?.reference ?? '—'}
-                  </td>
-                  <td className="px-3 py-3 min-w-0">
-                    {offre ? (
-                      <Link
-                        href={`/offres/${offre.id}`}
-                        className="text-brand-purple hover:underline font-medium"
-                      >
-                        {offre.titre}
-                      </Link>
-                    ) : (
-                      <span className="text-muted" aria-label="Non renseigné">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-muted whitespace-nowrap">
-                    {offre?.am_referent ?? '—'}
-                  </td>
-                  <td className="px-3 py-3 text-muted text-xs tabular-nums whitespace-nowrap">
-                    {fmtDate(c.created_at)}
-                  </td>
-                  <td className="px-3 py-3">
-                    {isEnAttente ? (
-                      <CandidatureActions candidatureId={c.id} compact />
-                    ) : (
-                      <span className="text-muted" aria-label="Aucune action disponible">
-                        —
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-            {sorted.length === 0 && (
-              <tr>
-                <td
-                  colSpan={10}
-                  className="px-3 py-8 text-center text-muted text-sm"
-                >
-                  {totalAll === 0
-                    ? 'Aucune candidature pour le moment.'
-                    : 'Aucune candidature ne correspond aux filtres.'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <CandidaturesTable
+        items={sorted}
+        totalAll={totalAll}
+        totalFiltered={totalFiltered}
+        hasFilter={hasFilter}
+        offresOptions={offresOptions}
+        amReferents={amReferents}
+      />
     </div>
   )
 }
