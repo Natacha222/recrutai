@@ -295,19 +295,20 @@ export default async function CandidaturesPage({
    * motif : on peut désormais qualifier et envoyer le CV au client
    * même si elles manquent, donc ça ne doit plus bloquer ni être
    * signalé comme un motif d'attente.
+   *
+   * Le cas « score < seuil » a été retiré (V45) : la colonne Score à
+   * gauche montre déjà la valeur (avec scoreColor → ambre/rouge selon
+   * la position vs seuil), donc le doublon « Sous le seuil (72/80) »
+   * dans la colonne Statut était redondant. Les candidatures
+   * concernées retombent maintenant sur « À trancher manuellement »,
+   * qui est plus actionnable (dit ce qu'il faut FAIRE, pas juste ce
+   * qui ne va pas).
    */
   const raisonEnAttente = (
-    c: Enriched,
-    seuil: number | null
-  ): { label: string; tone: 'red' | 'amber' | 'muted' } => {
+    c: Enriched
+  ): { label: string; tone: 'red' | 'muted' } => {
     if (c.justification_ia?.startsWith('Scoring IA indisponible')) {
       return { label: 'Scoring IA échoué', tone: 'red' }
-    }
-    if (seuil !== null && c.score_ia !== null && c.score_ia < seuil) {
-      return {
-        label: `Sous le seuil (${c.score_ia}/${seuil})`,
-        tone: 'amber',
-      }
     }
     return { label: 'À trancher manuellement', tone: 'muted' }
   }
@@ -415,15 +416,9 @@ export default async function CandidaturesPage({
               const hasRealEmail =
                 !!c.email?.trim() && !c.email.endsWith('@example.com')
               const isEnAttente = c.statut === 'en attente'
-              const raison = isEnAttente
-                ? raisonEnAttente(c, offre?.seuil ?? null)
-                : null
+              const raison = isEnAttente ? raisonEnAttente(c) : null
               const raisonClass =
-                raison?.tone === 'red'
-                  ? 'text-status-red'
-                  : raison?.tone === 'amber'
-                    ? 'text-status-amber'
-                    : 'text-muted'
+                raison?.tone === 'red' ? 'text-status-red' : 'text-muted'
               return (
                 <tr key={c.id} className="text-sm align-top">
                   <td className="px-3 py-3">
