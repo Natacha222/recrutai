@@ -445,7 +445,14 @@ export default async function OffreDetailPage({
               <th className="px-6 pt-0 pb-3 font-normal normal-case">
                 <TextFilter field="cand_q" placeholder="Nom ou email…" />
               </th>
-              <th className="px-6 pt-0 pb-3"></th>
+              {/* Pas de filtre sur le score (valeur continue, peu utile à
+                  filtrer), donc on profite de cette case pour expliquer
+                  le format « 88 / 60 » qui s'affichait dans la cellule
+                  sans que les AM en comprennent immédiatement les 2
+                  nombres. */}
+              <th className="px-6 pt-0 pb-3 text-[11px] text-muted normal-case font-normal text-center">
+                score / seuil
+              </th>
               <th className="px-6 pt-0 pb-3 font-normal normal-case">
                 <TextFilter field="just_q" placeholder="Mot-clé…" />
               </th>

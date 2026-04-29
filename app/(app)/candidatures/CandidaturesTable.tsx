@@ -199,7 +199,13 @@ export default function CandidaturesTable({
             <th className="px-3 pt-0 pb-3 font-normal normal-case">
               <TextFilter field="candidat" placeholder="Nom…" />
             </th>
-            <th className="px-3 pt-0 pb-3"></th>
+            {/* Pas de filtre sur le score (valeur continue, peu utile à
+                filtrer), donc on profite de cette case pour expliquer le
+                format « 88 / 60 » qui s'affichait dans la cellule sans
+                que les AM en comprennent immédiatement les 2 nombres. */}
+            <th className="px-3 pt-0 pb-3 text-[11px] text-muted normal-case font-normal text-center">
+              score / seuil
+            </th>
             <th className="px-3 pt-0 pb-3 font-normal normal-case">
               <SelectFilter
                 field="statut"
