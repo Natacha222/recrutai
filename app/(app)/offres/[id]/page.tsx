@@ -20,6 +20,7 @@ import {
 import CVUploader from './CVUploader'
 import CandidatureActions from './CandidatureActions'
 import BackfillPointsButton from './BackfillPointsButton'
+import DeleteOffreButton from './DeleteOffreButton'
 
 type CandidatureFilter = 'qualifié' | 'en attente' | 'rejeté'
 const FILTERS: CandidatureFilter[] = ['qualifié', 'en attente', 'rejeté']
@@ -320,6 +321,11 @@ export default async function OffreDetailPage({
             >
               Voir / modifier l&apos;offre
             </Link>
+            <DeleteOffreButton
+              offreId={offre.id}
+              offreTitre={offre.titre}
+              candidaturesCount={total}
+            />
           </div>
         </div>
       </div>

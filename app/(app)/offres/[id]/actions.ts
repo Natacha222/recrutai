@@ -729,6 +729,115 @@ export async function rejectCandidature(
   return { ok: true }
 }
 
+/**
+ * Supprime définitivement une offre + toutes ses candidatures + tous les
+ * fichiers Storage associés (CVs des candidatures + PDF de l'offre s'il existe).
+ *
+ * Ordre des opérations :
+ *  1. Lecture de l'offre + des candidatures pour récupérer les paths Storage
+ *     AVANT de toucher à la DB (sinon on perdrait la trace des fichiers).
+ *  2. Suppression Storage (best-effort) : un orphelin dans le bucket est
+ *     plus tolérable qu'une candidature en DB pointant vers un fichier
+ *     mort. Les erreurs Storage sont loggées mais n'arrêtent pas le flow.
+ *  3. DELETE candidatures (avant l'offre — fonctionne même si la FK n'a
+ *     pas ON DELETE CASCADE).
+ *  4. DELETE offre.
+ *  5. Revalidate des pages qui listent les offres / candidatures.
+ *
+ * Action irréversible : pas de soft-delete, pas de poubelle. La confirmation
+ * UI est dans DeleteOffreButton (modal avec compte des CVs liés).
+ */
+export type DeleteOffreResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export async function deleteOffre(
+  offreId: string
+): Promise<DeleteOffreResult> {
+  if (!offreId) return { ok: false, error: 'Offre introuvable.' }
+
+  const { supabase, user } = await getAuthedClient()
+  if (!user) {
+    return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+  }
+
+  const { data: offre, error: offreErr } = await supabase
+    .from('offres')
+    .select('id, pdf_path')
+    .eq('id', offreId)
+    .single()
+  if (offreErr || !offre) {
+    return { ok: false, error: 'Offre introuvable.' }
+  }
+
+  const { data: candidatures, error: candErr } = await supabase
+    .from('candidatures')
+    .select('id, cv_path')
+    .eq('offre_id', offreId)
+  if (candErr) {
+    return {
+      ok: false,
+      error: `Lecture candidatures : ${candErr.message}`,
+    }
+  }
+
+  // Storage cleanup — best-effort. On log les erreurs mais on continue le
+  // DELETE DB : un fichier orphelin dans le bucket est moins grave qu'une
+  // ligne candidature pointant vers un cv_path qui n'existe plus côté Storage.
+  const cvPaths = (candidatures ?? [])
+    .map((c) => c.cv_path)
+    .filter((p): p is string => !!p)
+  if (cvPaths.length > 0) {
+    const { error: cvStorageErr } = await supabase.storage
+      .from('cvs')
+      .remove(cvPaths)
+    if (cvStorageErr) {
+      console.warn(
+        `[deleteOffre] suppression CVs Storage partielle : ${cvStorageErr.message}`
+      )
+    }
+  }
+  if (offre.pdf_path) {
+    const { error: offreStorageErr } = await supabase.storage
+      .from('offres-pdf')
+      .remove([offre.pdf_path])
+    if (offreStorageErr) {
+      console.warn(
+        `[deleteOffre] suppression PDF offre Storage : ${offreStorageErr.message}`
+      )
+    }
+  }
+
+  // DB cleanup — candidatures puis offre. L'ordre permet de fonctionner
+  // même si la FK candidatures.offre_id n'a pas ON DELETE CASCADE.
+  const { error: delCandErr } = await supabase
+    .from('candidatures')
+    .delete()
+    .eq('offre_id', offreId)
+  if (delCandErr) {
+    return {
+      ok: false,
+      error: `Suppression candidatures : ${delCandErr.message}`,
+    }
+  }
+
+  const { error: delOffreErr } = await supabase
+    .from('offres')
+    .delete()
+    .eq('id', offreId)
+  if (delOffreErr) {
+    return {
+      ok: false,
+      error: `Suppression offre : ${delOffreErr.message}`,
+    }
+  }
+
+  revalidatePath('/offres')
+  revalidatePath('/dashboard')
+  revalidatePath('/candidatures')
+  return { ok: true }
+}
+
 type BackfillResult =
   | {
       ok: true
