@@ -304,8 +304,14 @@ export default function EditOffreForm({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           maxLength={FIELD_LIMITS.offre_description}
+          aria-describedby="description_help"
           className="w-full px-3 py-2 border border-border-soft rounded-md focus:outline-none focus:ring-2 focus:ring-brand-purple"
         />
+        <p id="description_help" className="text-xs text-muted mt-1">
+          Synthèse de l&apos;offre générée automatiquement par l&apos;IA
+          qui peut être modifiée manuellement. Cette description sert
+          au scoring des CVs reçus.
+        </p>
       </div>
 
       <div className="flex justify-end gap-3 pt-2">
