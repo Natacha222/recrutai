@@ -110,3 +110,143 @@ export async function updateClient(formData: FormData) {
   revalidatePath(`/clients/${id}`)
   redirect(`/clients?saved=${encodeURIComponent(nom)}`)
 }
+
+/**
+ * Supprime définitivement un client + TOUTES ses offres + TOUTES leurs
+ * candidatures + tous les fichiers Storage associés.
+ *
+ * Stratégie en cascade explicite (sans dépendre d'un éventuel ON DELETE
+ * CASCADE en DB) :
+ *  1. Lecture des offres + candidatures liées AVANT suppression, pour
+ *     récupérer la liste exhaustive des paths Storage à nettoyer.
+ *  2. Suppression Storage (best-effort) : CVs (`cvs/`) + PDFs d'offres
+ *     (`offres-pdf/`). Erreurs loggées mais non bloquantes — un orphelin
+ *     dans le bucket est moins grave qu'une row DB pointant vers un
+ *     fichier mort.
+ *  3. DELETE candidatures → DELETE offres → DELETE client (ordre
+ *     important pour ne pas violer la FK).
+ *  4. Revalidate des pages impactées.
+ *
+ * Action irréversible : pas de soft-delete. La confirmation UI est dans
+ * DeleteClientButton (modal avec compte exact des offres + CVs liés).
+ */
+export type DeleteClientResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export async function deleteClient(
+  clientId: string
+): Promise<DeleteClientResult> {
+  if (!clientId) return { ok: false, error: 'Client introuvable.' }
+
+  const { supabase, user } = await getAuthedClient()
+  if (!user) {
+    return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+  }
+
+  const { data: client, error: clientErr } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('id', clientId)
+    .single()
+  if (clientErr || !client) {
+    return { ok: false, error: 'Client introuvable.' }
+  }
+
+  const { data: offres, error: offresErr } = await supabase
+    .from('offres')
+    .select('id, pdf_path')
+    .eq('client_id', clientId)
+  if (offresErr) {
+    return { ok: false, error: `Lecture offres : ${offresErr.message}` }
+  }
+
+  const offreIds = (offres ?? []).map((o) => o.id)
+
+  // Toutes les candidatures liées à toutes les offres du client (transitif).
+  let candidatures: Array<{ id: string; cv_path: string | null }> = []
+  if (offreIds.length > 0) {
+    const { data, error: candErr } = await supabase
+      .from('candidatures')
+      .select('id, cv_path')
+      .in('offre_id', offreIds)
+    if (candErr) {
+      return {
+        ok: false,
+        error: `Lecture candidatures : ${candErr.message}`,
+      }
+    }
+    candidatures = data ?? []
+  }
+
+  // Storage cleanup — best-effort. Voir deleteOffre pour le rationale détaillé.
+  const cvPaths = candidatures
+    .map((c) => c.cv_path)
+    .filter((p): p is string => !!p)
+  if (cvPaths.length > 0) {
+    const { error: cvStorageErr } = await supabase.storage
+      .from('cvs')
+      .remove(cvPaths)
+    if (cvStorageErr) {
+      console.warn(
+        `[deleteClient] suppression CVs Storage partielle : ${cvStorageErr.message}`
+      )
+    }
+  }
+  const offrePdfPaths = (offres ?? [])
+    .map((o) => o.pdf_path)
+    .filter((p): p is string => !!p)
+  if (offrePdfPaths.length > 0) {
+    const { error: offresStorageErr } = await supabase.storage
+      .from('offres-pdf')
+      .remove(offrePdfPaths)
+    if (offresStorageErr) {
+      console.warn(
+        `[deleteClient] suppression PDFs offres Storage : ${offresStorageErr.message}`
+      )
+    }
+  }
+
+  // DB cleanup — candidatures, puis offres, puis client (ordre = inverse
+  // des dépendances FK pour ne pas violer de contrainte).
+  if (offreIds.length > 0) {
+    const { error: delCandErr } = await supabase
+      .from('candidatures')
+      .delete()
+      .in('offre_id', offreIds)
+    if (delCandErr) {
+      return {
+        ok: false,
+        error: `Suppression candidatures : ${delCandErr.message}`,
+      }
+    }
+  }
+
+  const { error: delOffresErr } = await supabase
+    .from('offres')
+    .delete()
+    .eq('client_id', clientId)
+  if (delOffresErr) {
+    return {
+      ok: false,
+      error: `Suppression offres : ${delOffresErr.message}`,
+    }
+  }
+
+  const { error: delClientErr } = await supabase
+    .from('clients')
+    .delete()
+    .eq('id', clientId)
+  if (delClientErr) {
+    return {
+      ok: false,
+      error: `Suppression client : ${delClientErr.message}`,
+    }
+  }
+
+  revalidatePath('/clients')
+  revalidatePath('/offres')
+  revalidatePath('/dashboard')
+  revalidatePath('/candidatures')
+  return { ok: true }
+}

@@ -7,6 +7,7 @@ import DuplicateClientErrorBanner from '@/components/DuplicateClientErrorBanner'
 import { effectiveStatut, formatValidite, referentFromUser } from '@/lib/format'
 import { getAvailableReferents } from '@/lib/referents'
 import { FIELD_LIMITS } from '@/lib/validation'
+import DeleteClientButton from './DeleteClientButton'
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ error?: string }>
@@ -50,6 +51,20 @@ export default async function ClientDetailPage({
   ])
   const offres = offresRes.data
 
+  // Compte total des candidatures pour TOUTES les offres de ce client.
+  // Utilisé par DeleteClientButton pour annoncer dans la modal le nombre
+  // exact de CVs qui partiront en cascade. `head: true` économise le
+  // payload (on ne récupère que le count, pas les rows).
+  const offreIds = (offres ?? []).map((o) => o.id)
+  let candidaturesCount = 0
+  if (offreIds.length > 0) {
+    const { count } = await supabase
+      .from('candidatures')
+      .select('id', { count: 'exact', head: true })
+      .in('offre_id', offreIds)
+    candidaturesCount = count ?? 0
+  }
+
   // Liste des référents : union clients + offres + user connecté + valeur
   // actuelle du client (pour qu'elle apparaisse dans le select même si
   // elle n'est plus référente d'aucune autre entité).
@@ -69,11 +84,21 @@ export default async function ClientDetailPage({
         <Link href="/clients" className="text-sm text-muted hover:underline">
           ← Retour aux clients
         </Link>
-        <h1 className="text-2xl font-bold mt-2">Fiche client</h1>
-        <p className="text-sm text-muted mt-1">
-          Ajouté le{' '}
-          {new Date(client.created_at).toLocaleDateString('fr-FR')}
-        </p>
+        <div className="flex items-start justify-between gap-3 mt-2 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold">Fiche client</h1>
+            <p className="text-sm text-muted mt-1">
+              Ajouté le{' '}
+              {new Date(client.created_at).toLocaleDateString('fr-FR')}
+            </p>
+          </div>
+          <DeleteClientButton
+            clientId={client.id}
+            clientNom={client.nom}
+            offresCount={offres?.length ?? 0}
+            candidaturesCount={candidaturesCount}
+          />
+        </div>
       </div>
 
       {isDuplicateError(error) ? (
