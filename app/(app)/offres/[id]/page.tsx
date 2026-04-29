@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import StatusBadge from '@/components/StatusBadge'
 import ResendEmailAction from '@/components/ResendEmailAction'
-import JustificationIA from '@/components/JustificationIA'
 import {
   formatValidite,
   effectiveStatut,
@@ -21,6 +20,7 @@ import CVUploader from './CVUploader'
 import CandidatureActions from './CandidatureActions'
 import BackfillPointsButton from './BackfillPointsButton'
 import DeleteOffreButton from './DeleteOffreButton'
+import JustificationIaButton from './JustificationIaButton'
 
 type CandidatureFilter = 'qualifié' | 'en attente' | 'rejeté'
 const FILTERS: CandidatureFilter[] = ['qualifié', 'en attente', 'rejeté']
@@ -432,7 +432,7 @@ export default async function OffreDetailPage({
               <th scope="col" className="px-6 pt-3 pb-2">
                 <SortHeader field="score" label="Score IA" defaultDir="desc" />
               </th>
-              <th scope="col" className="px-6 pt-3 pb-2 w-1/3">Justification IA</th>
+              <th scope="col" className="px-6 pt-3 pb-2">Justification IA</th>
               <th scope="col" className="px-6 pt-3 pb-2">
                 <SortHeader field="statut" label="Statut" defaultDir="asc" />
               </th>
@@ -489,11 +489,33 @@ export default async function OffreDetailPage({
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-4 text-sm max-w-md break-words">
-                  <JustificationIA
-                    pointsForts={c.points_forts}
-                    pointsFaibles={c.points_faibles}
-                    justification={c.justification_ia}
+                <td className="px-6 py-4">
+                  {/* V52 : modal « Voir détails » identique à la liste
+                      globale des candidatures. La candidature est enrichie
+                      avec `_offre` (l'offre courante) pour que le modal
+                      ait accès au seuil + titre dans son en-tête. */}
+                  <JustificationIaButton
+                    candidature={{
+                      id: c.id,
+                      nom: c.nom,
+                      email: c.email,
+                      score_ia: c.score_ia,
+                      statut: c.statut,
+                      created_at: c.created_at,
+                      cv_url: c.cv_url,
+                      justification_ia: c.justification_ia,
+                      points_forts: c.points_forts,
+                      points_faibles: c.points_faibles,
+                      email_sent_at: c.email_sent_at,
+                      email_error: c.email_error,
+                      _offre: {
+                        id: offre.id,
+                        titre: offre.titre,
+                        reference: offre.reference,
+                        seuil: offre.seuil,
+                        am_referent: offre.am_referent,
+                      },
+                    }}
                   />
                 </td>
                 <td className="px-6 py-4">
