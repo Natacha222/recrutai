@@ -35,10 +35,15 @@ export async function updateSession(request: NextRequest) {
   //   - /login : formulaire de connexion
   //   - /mot-de-passe-oublie : demande de lien de réinitialisation
   //   - /auth/* : callback OAuth/recovery, logout, reset du mot de passe
+  //   - /api/cron/* : endpoints de cron Vercel — ces routes ont leur
+  //     propre auth via CRON_SECRET (cf. route.ts). Sans cette exception,
+  //     le proxy redirigerait vers /login et le cron Vercel recevrait du
+  //     HTML au lieu de notre JSON.
   const isPublic =
     url.pathname === '/login' ||
     url.pathname === '/mot-de-passe-oublie' ||
-    url.pathname.startsWith('/auth')
+    url.pathname.startsWith('/auth') ||
+    url.pathname.startsWith('/api/cron')
 
   if (!user && !isPublic) {
     url.pathname = '/login'
