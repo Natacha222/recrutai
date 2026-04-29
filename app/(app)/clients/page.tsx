@@ -88,11 +88,23 @@ type SearchParams = Promise<{
   dir?: string
 }>
 
-const OFFRES_FILTERS: { value: string; label: string }[] = [
-  { value: '0', label: 'Aucune' },
-  { value: '1', label: 'Au moins 1' },
-  { value: '5', label: 'Au moins 5' },
-  { value: '10', label: 'Au moins 10' },
+// Filtres par plage (et non plus seuil min) — V46. Le filtre « Au moins N »
+// laissait la liste majoritairement remplie de clients déjà bien servis ;
+// les plages permettent de cibler un segment précis (les nouveaux entrants
+// 1-4, le cœur de portefeuille 5-9, les gros comptes 10+).
+//
+// `matches` encode la condition d'appartenance à chaque bucket. La valeur
+// (`value`) reste une string courte pour rester lisible dans l'URL et
+// permettre la recopie d'un filtre par lien partagé.
+const OFFRES_FILTERS: {
+  value: string
+  label: string
+  matches: (n: number) => boolean
+}[] = [
+  { value: '0', label: 'Aucune', matches: (n) => n === 0 },
+  { value: '1', label: 'Entre 1 et 4', matches: (n) => n >= 1 && n <= 4 },
+  { value: '5', label: 'Entre 5 et 9', matches: (n) => n >= 5 && n <= 9 },
+  { value: '10', label: 'Plus de 10', matches: (n) => n >= 10 },
 ]
 
 export default async function ClientsPage({
@@ -150,21 +162,13 @@ export default async function ClientsPage({
 
   // Filter
   const qLower = q.trim().toLowerCase()
-  const offresMin = OFFRES_FILTERS.some((o) => o.value === offres)
-    ? Number(offres)
-    : null
+  const offresBucket = OFFRES_FILTERS.find((o) => o.value === offres) ?? null
   const filtered = enriched.filter((c) => {
     if (qLower && !(c.nom ?? '').toLowerCase().includes(qLower)) return false
     if (formule && c.formule !== formule) return false
     if (secteur && c.secteur !== secteur) return false
     if (am && c.am_referent !== am) return false
-    if (offresMin !== null) {
-      if (offresMin === 0) {
-        if (c.offres_actives !== 0) return false
-      } else if (c.offres_actives < offresMin) {
-        return false
-      }
-    }
+    if (offresBucket && !offresBucket.matches(c.offres_actives)) return false
     return true
   })
 
