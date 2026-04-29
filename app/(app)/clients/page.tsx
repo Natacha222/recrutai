@@ -1,12 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import FormuleBadge from '@/components/FormuleBadge'
-import ClickableRow from '@/components/ClickableRow'
-import {
-  FiltersReset,
-  SelectFilter,
-  TextFilter,
-} from '@/components/TableFilters'
+import { FiltersReset } from '@/components/TableFilters'
+import ClientsTable, { type ClientItem } from './ClientsTable'
 
 const FILTER_FIELDS = ['q', 'formule', 'secteur', 'am', 'offres']
 
@@ -26,56 +21,6 @@ const SORT_KEYS: SortKey[] = [
   'am_referent',
 ]
 
-const FORMULES = ['Abonnement', 'À la mission', 'Volume entreprise']
-
-function SortableHeader({
-  label,
-  sortKey,
-  sort,
-  dir,
-  href,
-  className = '',
-}: {
-  label: string
-  sortKey: SortKey
-  sort: SortKey
-  dir: SortDir
-  href: string
-  className?: string
-}) {
-  const active = sort === sortKey
-  const arrow = !active ? '↕' : dir === 'asc' ? '↑' : '↓'
-  // aria-sort : indique au lecteur d'écran la direction de tri active.
-  // 'none' par défaut (donc non-actif = triable mais pas trié).
-  const ariaSort: 'ascending' | 'descending' | 'none' = active
-    ? dir === 'asc'
-      ? 'ascending'
-      : 'descending'
-    : 'none'
-  return (
-    <th
-      scope="col"
-      aria-sort={ariaSort}
-      className={`px-6 pt-3 pb-2 ${className}`}
-    >
-      <Link
-        href={href}
-        className={`inline-flex items-center gap-1 hover:text-brand-purple ${
-          active ? 'text-brand-purple' : ''
-        }`}
-      >
-        <span>{label}</span>
-        <span
-          className={`text-[10px] ${active ? 'opacity-100' : 'opacity-40'}`}
-          aria-hidden
-        >
-          {arrow}
-        </span>
-      </Link>
-    </th>
-  )
-}
-
 type SearchParams = Promise<{
   saved?: string
   error?: string
@@ -92,19 +37,14 @@ type SearchParams = Promise<{
 // laissait la liste majoritairement remplie de clients déjà bien servis ;
 // les plages permettent de cibler un segment précis (les nouveaux entrants
 // 1-4, le cœur de portefeuille 5-9, les gros comptes 10+).
-//
-// `matches` encode la condition d'appartenance à chaque bucket. La valeur
-// (`value`) reste une string courte pour rester lisible dans l'URL et
-// permettre la recopie d'un filtre par lien partagé.
 const OFFRES_FILTERS: {
   value: string
-  label: string
   matches: (n: number) => boolean
 }[] = [
-  { value: '0', label: 'Aucune', matches: (n) => n === 0 },
-  { value: '1', label: 'Entre 1 et 4', matches: (n) => n >= 1 && n <= 4 },
-  { value: '5', label: 'Entre 5 et 9', matches: (n) => n >= 5 && n <= 9 },
-  { value: '10', label: 'Plus de 10', matches: (n) => n >= 10 },
+  { value: '0', matches: (n) => n === 0 },
+  { value: '1', matches: (n) => n >= 1 && n <= 4 },
+  { value: '5', matches: (n) => n >= 5 && n <= 9 },
+  { value: '10', matches: (n) => n >= 10 },
 ]
 
 export default async function ClientsPage({
@@ -152,9 +92,17 @@ export default async function ClientsPage({
     )
   ).sort((a, b) => a.localeCompare(b, 'fr'))
 
-  // Enrich with computed offres_actives
-  const enriched = allClients.map((c) => ({
-    ...c,
+  // Enrich with computed offres_actives. On ne spread pas `c` directement
+  // pour éviter de transférer `offres` (la relation jointe) et `created_at`
+  // au Client Component qui n'en a pas besoin — économise la sérialisation
+  // RSC pour rien.
+  const enriched: ClientItem[] = allClients.map((c) => ({
+    id: c.id,
+    nom: c.nom,
+    secteur: c.secteur,
+    contact_email: c.contact_email,
+    formule: c.formule,
+    am_referent: c.am_referent,
     offres_actives: (Array.isArray(c.offres) ? c.offres : []).filter(
       (o) => o.statut === 'actif'
     ).length,
@@ -216,6 +164,9 @@ export default async function ClientsPage({
       ? `${total} entreprises gérées par l'équipe`
       : `${total} entreprise gérée par l'équipe`
 
+  // Pré-calcul des hrefs de tri pour chaque colonne — on ne peut pas
+  // passer la fonction `sortHref` au Client Component (non sérialisable),
+  // donc on calcule un Record<SortKey, string> ici et on le passe en prop.
   function sortHref(key: SortKey) {
     const newDir: SortDir = sort === key && dir === 'asc' ? 'desc' : 'asc'
     const sp = new URLSearchParams()
@@ -229,6 +180,13 @@ export default async function ClientsPage({
     const qs = sp.toString()
     return qs ? `/clients?${qs}` : '/clients'
   }
+  const sortHrefs = SORT_KEYS.reduce(
+    (acc, key) => {
+      acc[key] = sortHref(key)
+      return acc
+    },
+    {} as Record<SortKey, string>
+  )
 
   return (
     <div>
@@ -266,132 +224,15 @@ export default async function ClientsPage({
         </div>
       )}
 
-      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-surface">
-            <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <SortableHeader
-                label="Entreprise"
-                sortKey="nom"
-                sort={sort}
-                dir={dir}
-                href={sortHref('nom')}
-              />
-              <SortableHeader
-                label="Formule"
-                sortKey="formule"
-                sort={sort}
-                dir={dir}
-                href={sortHref('formule')}
-              />
-              <SortableHeader
-                label="Secteur"
-                sortKey="secteur"
-                sort={sort}
-                dir={dir}
-                href={sortHref('secteur')}
-              />
-              <SortableHeader
-                label="Offres actives"
-                sortKey="offres_actives"
-                sort={sort}
-                dir={dir}
-                href={sortHref('offres_actives')}
-              />
-              <SortableHeader
-                label="Référent"
-                sortKey="am_referent"
-                sort={sort}
-                dir={dir}
-                href={sortHref('am_referent')}
-              />
-            </tr>
-            <tr className="align-top">
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <TextFilter field="q" placeholder="Nom d'entreprise…" />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="formule"
-                  options={FORMULES}
-                  placeholder="Toutes"
-                />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="secteur"
-                  options={secteurs}
-                  placeholder="Tous"
-                />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="offres"
-                  options={OFFRES_FILTERS.map((o) => o.value)}
-                  labels={Object.fromEntries(
-                    OFFRES_FILTERS.map((o) => [o.value, o.label])
-                  )}
-                  placeholder="Toutes"
-                />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="am"
-                  options={amReferents}
-                  placeholder="Tous"
-                />
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-soft">
-            {sorted.map((c) => (
-              <ClickableRow
-                key={c.id}
-                href={`/clients/${c.id}`}
-                className="text-sm hover:bg-surface transition align-top"
-              >
-                <td className="px-6 py-5">
-                  <Link
-                    href={`/clients/${c.id}`}
-                    className="font-semibold text-brand-indigo-text hover:text-brand-purple"
-                  >
-                    {c.nom}
-                  </Link>
-                  {c.contact_email && (
-                    <div className="text-xs text-brand-purple mt-1">
-                      {c.contact_email}
-                    </div>
-                  )}
-                </td>
-                <td className="px-6 py-5">
-                  <FormuleBadge formule={c.formule} />
-                </td>
-                <td className="px-6 py-5 text-muted">{c.secteur ?? '—'}</td>
-                <td className="px-6 py-5">
-                  <span className="font-bold text-brand-purple text-base">
-                    {c.offres_actives}
-                  </span>
-                </td>
-                <td className="px-6 py-5 text-muted">
-                  {c.am_referent ?? '—'}
-                </td>
-              </ClickableRow>
-            ))}
-            {sorted.length === 0 && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-6 py-8 text-center text-muted text-sm"
-                >
-                  {hasFilter
-                    ? 'Aucun client ne correspond à ces filtres.'
-                    : 'Aucun client pour le moment.'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <ClientsTable
+        items={sorted}
+        hasFilter={hasFilter}
+        secteurs={secteurs}
+        amReferents={amReferents}
+        sort={sort}
+        dir={dir}
+        sortHrefs={sortHrefs}
+      />
     </div>
   )
 }

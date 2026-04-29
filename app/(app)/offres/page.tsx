@@ -1,17 +1,11 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import StatusBadge from '@/components/StatusBadge'
 import {
   effectiveStatut,
-  formatValidite,
   normalizeStatutOffreParam,
 } from '@/lib/format'
-import {
-  DateFilter,
-  FiltersReset,
-  SelectFilter,
-  TextFilter,
-} from '@/components/TableFilters'
+import { FiltersReset } from '@/components/TableFilters'
+import OffresTable, { type OffreItem } from './OffresTable'
 
 type SortKey =
   | 'reference'
@@ -37,13 +31,6 @@ const SORT_KEYS: SortKey[] = [
   'seuil',
 ]
 
-const CONTRATS = ['CDI', 'CDD', 'Alternance', 'Stage']
-
-const STATUTS: { value: string; label: string }[] = [
-  { value: 'actif', label: 'Active' },
-  { value: 'clos', label: 'Clôturée' },
-]
-
 const FILTER_FIELDS = [
   'ref_q',
   'q',
@@ -54,54 +41,6 @@ const FILTER_FIELDS = [
   'validite',
 ]
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
-function SortableHeader({
-  label,
-  sortKey,
-  sort,
-  dir,
-  href,
-  className = '',
-}: {
-  label: string
-  sortKey: SortKey
-  sort: SortKey
-  dir: SortDir
-  href: string
-  className?: string
-}) {
-  const active = sort === sortKey
-  const arrow = !active ? '↕' : dir === 'asc' ? '↑' : '↓'
-  // aria-sort : indique au lecteur d'écran la direction de tri active.
-  // 'none' par défaut (donc non-actif = triable mais pas trié).
-  const ariaSort: 'ascending' | 'descending' | 'none' = active
-    ? dir === 'asc'
-      ? 'ascending'
-      : 'descending'
-    : 'none'
-  return (
-    <th
-      scope="col"
-      aria-sort={ariaSort}
-      className={`px-6 pt-3 pb-2 ${className}`}
-    >
-      <Link
-        href={href}
-        className={`inline-flex items-center gap-1 hover:text-brand-purple ${
-          active ? 'text-brand-purple' : ''
-        }`}
-      >
-        <span>{label}</span>
-        <span
-          className={`text-[10px] ${active ? 'opacity-100' : 'opacity-40'}`}
-          aria-hidden
-        >
-          {arrow}
-        </span>
-      </Link>
-    </th>
-  )
-}
 
 type SearchParams = Promise<{
   /** Recherche texte sur la référence d'offre (ex : "tech-2026"). */
@@ -153,7 +92,7 @@ export default async function OffresPage({
       'id, reference, titre, lieu, statut, contrat, seuil, created_at, date_validite, am_referent, client_id, clients(nom), candidatures(id, statut)'
     )
 
-  const allOffres = (offres ?? []).map((o) => {
+  const allOffres: OffreItem[] = (offres ?? []).map((o) => {
     const clientNom = Array.isArray(o.clients)
       ? (o.clients[0]?.nom ?? null)
       : ((o.clients as { nom: string } | null)?.nom ?? null)
@@ -163,7 +102,16 @@ export default async function OffresPage({
       (c) => c.statut === 'qualifié'
     ).length
     return {
-      ...o,
+      id: o.id,
+      reference: o.reference,
+      titre: o.titre,
+      lieu: o.lieu,
+      statut: o.statut,
+      contrat: o.contrat,
+      seuil: o.seuil,
+      date_validite: o.date_validite,
+      am_referent: o.am_referent,
+      client_id: o.client_id,
       clientNom,
       effective,
       total,
@@ -287,6 +235,7 @@ export default async function OffresPage({
         offresClos > 1 ? 's' : ''
       }`
 
+  // Pré-calcul des hrefs de tri (cf. ClientsTable pour le rationale).
   function sortHref(key: SortKey) {
     const newDir: SortDir = sort === key && dir === 'asc' ? 'desc' : 'asc'
     const sp = new URLSearchParams()
@@ -302,6 +251,13 @@ export default async function OffresPage({
     const qs = sp.toString()
     return qs ? `/offres?${qs}` : '/offres'
   }
+  const sortHrefs = SORT_KEYS.reduce(
+    (acc, key) => {
+      acc[key] = sortHref(key)
+      return acc
+    },
+    {} as Record<SortKey, string>
+  )
 
   return (
     <div>
@@ -321,206 +277,15 @@ export default async function OffresPage({
         </Link>
       </div>
 
-      <div className="bg-surface-alt rounded-xl border border-border-soft overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-surface">
-            <tr className="text-left text-xs font-semibold text-muted uppercase">
-              <SortableHeader
-                label="Référence"
-                sortKey="reference"
-                sort={sort}
-                dir={dir}
-                href={sortHref('reference')}
-              />
-              <SortableHeader
-                label="Intitulé"
-                sortKey="titre"
-                sort={sort}
-                dir={dir}
-                href={sortHref('titre')}
-              />
-              <SortableHeader
-                label="Client"
-                sortKey="client"
-                sort={sort}
-                dir={dir}
-                href={sortHref('client')}
-              />
-              <SortableHeader
-                label="Référent"
-                sortKey="referent"
-                sort={sort}
-                dir={dir}
-                href={sortHref('referent')}
-              />
-              <SortableHeader
-                label="Contrat"
-                sortKey="contrat"
-                sort={sort}
-                dir={dir}
-                href={sortHref('contrat')}
-              />
-              <SortableHeader
-                label="Statut"
-                sortKey="statut"
-                sort={sort}
-                dir={dir}
-                href={sortHref('statut')}
-              />
-              <SortableHeader
-                label="Valide jusqu'au"
-                sortKey="date_validite"
-                sort={sort}
-                dir={dir}
-                href={sortHref('date_validite')}
-              />
-              <SortableHeader
-                label="CV reçus / Qualifiés"
-                sortKey="candidatures"
-                sort={sort}
-                dir={dir}
-                href={sortHref('candidatures')}
-              />
-              <SortableHeader
-                label="Seuil"
-                sortKey="seuil"
-                sort={sort}
-                dir={dir}
-                href={sortHref('seuil')}
-              />
-            </tr>
-            <tr className="align-top">
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <TextFilter field="ref_q" placeholder="Référence…" />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <TextFilter field="q" placeholder="Intitulé…" />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="client"
-                  options={clientsList}
-                  placeholder="Tous"
-                />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="referent"
-                  options={referentsList}
-                  placeholder="Tous"
-                />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="contrat"
-                  options={CONTRATS}
-                  placeholder="Tous"
-                />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <SelectFilter
-                  field="statut"
-                  options={STATUTS.map((s) => s.value)}
-                  labels={Object.fromEntries(
-                    STATUTS.map((s) => [s.value, s.label])
-                  )}
-                  placeholder="Tous"
-                />
-              </th>
-              <th className="px-6 pt-0 pb-3 font-normal normal-case">
-                <DateFilter field="validite" />
-              </th>
-              <th className="px-6 pt-0 pb-3"></th>
-              <th className="px-6 pt-0 pb-3"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-soft">
-            {sorted.map((o) => (
-              <tr
-                key={o.id}
-                className="text-sm hover:bg-surface transition align-top"
-              >
-                <td className="px-6 py-5 font-mono font-semibold tabular-nums whitespace-nowrap">
-                  {o.reference ? (
-                    <Link
-                      href={`/offres/${o.id}`}
-                      className="text-brand-purple hover:underline"
-                    >
-                      {o.reference}
-                    </Link>
-                  ) : (
-                    <span className="text-muted" aria-label="Non renseigné">—</span>
-                  )}
-                </td>
-                <td className="px-6 py-5">
-                  <Link
-                    href={`/offres/${o.id}`}
-                    className="font-semibold text-brand-indigo-text hover:text-brand-purple"
-                  >
-                    {o.titre}
-                  </Link>
-                  {o.lieu && (
-                    <div className="text-xs text-muted mt-1 flex items-center gap-1">
-                      <span aria-hidden="true">📍</span>
-                      <span>
-                        <span className="sr-only">Lieu : </span>
-                        {o.lieu}
-                      </span>
-                    </div>
-                  )}
-                </td>
-                <td className="px-6 py-5">
-                  {/* Lien vers la fiche client : on hover-underline pour
-                      signaler l'affordance sans alourdir la table (le nom
-                      reste en text-muted comme avant pour ne pas voler la
-                      vedette au titre de l'offre, qui est l'action
-                      principale de la ligne). */}
-                  {o.client_id && o.clientNom ? (
-                    <Link
-                      href={`/clients/${o.client_id}`}
-                      className="text-muted hover:text-brand-purple hover:underline transition-colors"
-                    >
-                      {o.clientNom}
-                    </Link>
-                  ) : (
-                    <span className="text-muted">—</span>
-                  )}
-                </td>
-                <td className="px-6 py-5 text-muted">
-                  {o.am_referent ?? '—'}
-                </td>
-                <td className="px-6 py-5 text-muted">{o.contrat ?? '—'}</td>
-                <td className="px-6 py-5">
-                  <StatusBadge status={o.effective} />
-                </td>
-                <td className="px-6 py-5 text-muted tabular-nums">
-                  {formatValidite(o.date_validite)}
-                </td>
-                <td className="px-6 py-5 font-semibold tabular-nums">
-                  {o.total} · {o.qualifies}
-                </td>
-                <td className="px-6 py-5">
-                  <span className="font-bold text-brand-purple">
-                    {o.seuil}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {sorted.length === 0 && (
-              <tr>
-                <td
-                  colSpan={9}
-                  className="px-6 py-8 text-center text-muted text-sm"
-                >
-                  {hasFilter
-                    ? 'Aucune offre ne correspond à ces filtres.'
-                    : 'Aucune offre pour le moment.'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <OffresTable
+        items={sorted}
+        hasFilter={hasFilter}
+        clientsList={clientsList}
+        referentsList={referentsList}
+        sort={sort}
+        dir={dir}
+        sortHrefs={sortHrefs}
+      />
     </div>
   )
 }
